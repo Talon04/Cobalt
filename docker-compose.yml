@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: cobalt
+      POSTGRES_PASSWORD: cobalt
+      POSTGRES_DB: cobalt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "21434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    gpus : all
+    
+  cobalt:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cobalt:cobalt@postgres/cobalt
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      - postgres
+      - ollama
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
+  ollama_data:

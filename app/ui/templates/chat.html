@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cobalt</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1 id="app-title">Cobalt - {{MODEL_NAME}}</h1>
+        <div class="chat-bar">
+            <select id="chat-select" onchange="switchChat(this.value)"></select>
+            <button id="new-chat-button" onclick="createNewChat()">New chat</button>
+        </div>
+        <div id="pull-status" class="status hidden"></div>
+        <div id="chat"></div>
+        <input type="text" id="input" placeholder="Ask me anything...">
+        <button id="send-button" onclick="sendMessage()">Send</button>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
