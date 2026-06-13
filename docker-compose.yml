@@ -17,15 +17,13 @@ services:
     ports:
       - "21434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - /var/.ollama:/root/.ollama
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     gpus : all
     
   cobalt:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/talon04/cobalt:latest
     ports:
       - "8000:8000"
     environment:
