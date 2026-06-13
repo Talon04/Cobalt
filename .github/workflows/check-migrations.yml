@@ -1,0 +1,44 @@
+name: Check Migrations
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-migrations:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Check if migrations are up to date
+      run: |
+        # Generate migrations to a temp file
+        alembic revision --autogenerate -m "temp check" > /dev/null 2>&1
+        
+        # Get the latest migration file
+        LATEST=$(ls -t alembic/versions/*.py | head -n 1)
+        
+        # Check if it has any actual changes (not just "pass")
+        if grep -q "op.create_table\|op.add_column\|op.drop_table\|op.alter_column" "$LATEST"; then
+          echo "❌ Database models changed but migration not generated!"
+          echo "Run: alembic revision --autogenerate -m 'description'"
+          rm "$LATEST"  # Clean up temp migration
+          exit 1
+        fi
+        
+        # Clean up temp migration if it was empty
+        rm "$LATEST"
+        echo "✅ Migrations are up to date"
