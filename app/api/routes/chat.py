@@ -88,7 +88,7 @@ async def send_message_stream(msg: ChatMessageSchema, db: AsyncSession = Depends
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    user_message = ChatMessage(chat_id=msg.chat_id, role=msg.role, content=msg.content)
+    user_message = ChatMessage(chat_id=msg.chat_id, role=msg.role, content=msg.content, model=None)
     db.add(user_message)
     await db.commit()
 
@@ -133,7 +133,7 @@ async def send_message_stream(msg: ChatMessageSchema, db: AsyncSession = Depends
             yield f"data: {json.dumps(err)}\n\n"
         # after streaming finishes, persist the full assistant message
         try:
-            assistant_message = ChatMessage(chat_id=msg.chat_id, role="assistant", content=accumulated)
+            assistant_message = ChatMessage(chat_id=msg.chat_id, role="assistant", content=accumulated, model=response_model)
             if chat.title == "New chat" and msg.role == "user":
                 chat.title = msg.content[:40] or "New chat"
             db.add(assistant_message)
