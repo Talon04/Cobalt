@@ -129,8 +129,19 @@ async def send_message_stream(msg: ChatMessageSchema, db: AsyncSession = Depends
                     payload = {"content": content_piece}
                     yield f"data: {json.dumps(payload)}\n\n"
         except Exception as e:
-            err = {"error": str(e)}
-            yield f"data: {json.dumps(err)}\n\n"
+            message = str(e)
+
+            if "404 Not Found" in message:
+                err = {
+                    "error": "MODEL_NOT_FOUND",
+                    "message": message
+                }
+            else:
+                err = {
+                    "error": "UNKNOWN_ERROR",
+                    "message": message
+                }
+                yield f"data: {json.dumps(err)}\n\n"
         # after streaming finishes, persist the full assistant message
         try:
             assistant_message = ChatMessage(chat_id=msg.chat_id, role="assistant", content=accumulated, model=response_model)

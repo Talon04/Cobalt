@@ -23,6 +23,9 @@ services:
     gpus : all
     
   cobalt:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/talon04/cobalt:latest
     ports:
       - "8000:8000"

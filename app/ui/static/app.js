@@ -116,18 +116,36 @@ async function sendMessage() {
         const resp = await fetch("/chat/send-stream", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({chat_id: currentChatId, role: "user", content: msg})
+            body: JSON.stringify({chat_id: currentChatId, role: "user", content: msg, model: null})
         });
 
         if (!resp.ok) {
             const err = await resp.text();
-            chat.innerHTML += `<p style="color:red">Error: ${err}</p>`;
-            return;
-        }
+
+              chat.innerHTML += `<p style="color:red">Error: ${err}</p>`;
+                console.error("Send message failed:", err);
+
+            const isMissingModel =
+                err.includes("404 Not Found") ||
+                err.includes("MODEL_NOT_FOUND") ||;
+
+            if (isMissingModel) {
+                chat.innerHTML += `
+                    <p style="color:orange">
+                        <strong>Cobalt:</strong>
+                        Model is not available locally. Click "Pull Model".
+                    </p>
+                    `;
+
+        showPullModelButton();
+    }
+
+    return;
+}
 
         // Prepare a placeholder for the assistant streaming response
         const assistantElem = document.createElement('p');
-        assistantElem.innerHTML = `<strong>Cobalt - ${message.model || "Unknown Model"}: </strong> <span class="streaming"></span>`;
+        assistantElem.innerHTML = `<strong>Cobalt: </strong> <span class="streaming"></span>`;
         chat.appendChild(assistantElem);
         const streamSpan = assistantElem.querySelector('.streaming');
 
@@ -238,6 +256,21 @@ async function waitForPullToFinish() {
             isPullRunning = false;
             return;
         }
+    }
+}
+
+function showPullModelButton() {
+    const btn = document.getElementById("pull-model-button");
+    if (btn) {
+        btn.classList.remove("hidden");
+        btn.disabled = false;
+    }
+}
+
+function hidePullModelButton() {
+    const btn = document.getElementById("pull-model-button");
+    if (btn) {
+        btn.classList.add("hidden");
     }
 }
 
