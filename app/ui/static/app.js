@@ -127,7 +127,7 @@ async function sendMessage() {
 
         // Prepare a placeholder for the assistant streaming response
         const assistantElem = document.createElement('p');
-        assistantElem.innerHTML = `<strong>Cobalt - ${message.model || "Unknown Model"}: </strong> <span class="streaming"></span>`;
+        assistantElem.innerHTML = `<strong>Cobalt: </strong> <span class="streaming"></span>`;
         chat.appendChild(assistantElem);
         const streamSpan = assistantElem.querySelector('.streaming');
 
