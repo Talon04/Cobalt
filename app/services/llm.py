@@ -27,7 +27,7 @@ class OllamaService:
             )
             return resp
         except Exception as e:
-            logger.error(f"Ollama error: {e}")
+            logger.error(f"Ollama error: {e} for: {self.model}")
             raise
 
     async def stream_chat(self, messages: list[dict]):
@@ -50,7 +50,7 @@ class OllamaService:
                         chunk = {"raw": line}
                     yield chunk
         except Exception as e:
-            logger.error(f"Ollama streaming error: {e}")
+            logger.error(f"Ollama error: {e} for: {self.model}")
             raise
 
     async def pull_model(self, model_name: str | None = None):
