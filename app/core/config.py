@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     sqlalchemy_echo: bool = False
     
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma4"
+    ollama_model: str = "qwen3:14b"
     
     api_host: str = "0.0.0.0"
     api_port: int = 8000
