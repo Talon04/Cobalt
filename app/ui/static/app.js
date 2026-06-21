@@ -110,9 +110,9 @@ async function sendMessage() {
     
     chat.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
     input.value = "";
+    setSendingEnabled(false);
     
     try {
-        // Use streaming endpoint and render partial assistant content as it arrives
         const resp = await fetch("/chat/send-stream", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -122,28 +122,13 @@ async function sendMessage() {
         if (!resp.ok) {
             const err = await resp.text();
 
-              chat.innerHTML += `<p style="color:red">Error: ${err}</p>`;
-                console.error("Send message failed:", err);
+            chat.innerHTML += `<p style="color:red">Network error: ${err}</p>`;
+            console.error("Send message failed:", err);
+            setSendingEnabled(true);
 
-            const isMissingModel =
-                err.includes("404 Not Found") ||
-                err.includes("MODEL_NOT_FOUND") ||;
+            return;
+        }
 
-            if (isMissingModel) {
-                chat.innerHTML += `
-                    <p style="color:orange">
-                        <strong>Cobalt:</strong>
-                        Model is not available locally. Click "Pull Model".
-                    </p>
-                    `;
-
-        showPullModelButton();
-    }
-
-    return;
-}
-
-        // Prepare a placeholder for the assistant streaming response
         const assistantElem = document.createElement('p');
         assistantElem.innerHTML = `<strong>Cobalt: </strong> <span class="streaming"></span>`;
         chat.appendChild(assistantElem);
@@ -153,31 +138,51 @@ async function sendMessage() {
         const decoder = new TextDecoder();
         let buffer = '';
 
+        let streamEnded = false;
         while (true) {
             const { value, done } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
 
-            // SSE framing: events separated by double newline, lines start with 'data: '
             let parts = buffer.split('\n\n');
-            buffer = parts.pop(); // last partial
+            buffer = parts.pop();
             for (const part of parts) {
                 const lines = part.split('\n');
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
                             const payload = JSON.parse(line.replace(/^data: /, ''));
+                            
+                            if (payload.type === 'connected') {
+                                // Connection established, worker starting
+                                console.log("Stream connected, job_id:", payload.job_id);
+                                continue;
+                            }
+                            
                             if (payload.type === 'meta' && payload.model) {
                                 setAppModel(payload.model);
                                 continue;
                             }
-                            if (payload.error) {
-                                chat.innerHTML += `<p style="color:red"><strong>Cobalt:</strong> ${payload.error}</p>`;
-                                setSendingEnabled(true);
-                                return;
+                            
+                            if (payload.type === 'keepalive') {
+                                // Ignore keepalive events
+                                continue;
                             }
+                            
+                            if (payload.type === 'stream_done' || payload.type === 'done') {
+                                streamEnded = true;
+                                break;
+                            }
+                            
+                            if (payload.error) {
+                                const err = payload.error;
+                                chat.innerHTML += `<p style="color:red"><strong>Error:</strong> ${err}</p>`;
+                                setSendingEnabled(true);
+                                streamEnded = true;
+                                break;
+                            }
+                            
                             if (payload.content) {
-                                // append partial content
                                 streamSpan.textContent += payload.content;
                             }
                         } catch (e) {
@@ -185,10 +190,11 @@ async function sendMessage() {
                         }
                     }
                 }
+                if (streamEnded) break;
             }
+            if (streamEnded) break;
         }
 
-        // streaming finished, refresh chats to update titles/listings
         await loadChats(currentChatId);
         setSendingEnabled(true);
     } catch (e) {

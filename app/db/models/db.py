@@ -13,10 +13,10 @@ class ChatThread(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    messages = relationship("ChatMessage", back_populates="chat", cascade="all, delete-orphan")
+    messages = relationship("ChatPrompt", back_populates="chat", cascade="all, delete-orphan")
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
+class ChatPrompt(Base):
+    __tablename__ = "chat_prompts"
 
     id = Column(Integer, primary_key=True)
     chat_id = Column(Integer, ForeignKey("chat_threads.id", ondelete="CASCADE"), nullable=False)
@@ -36,3 +36,16 @@ class ScheduledTask(Base):
     cron_expression = Column(String(100))
     enabled = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class BackgroundJob(Base):
+    __tablename__ = "background_jobs"
+
+    id = Column(Integer, primary_key=True)
+    job_id = Column(String(255), unique=True)
+    status = Column(String(50))  # running, done, failed
+    prompt_id = Column(Integer, ForeignKey("chat_prompts.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    error = Column(Text, nullable=True)
+
+    #chat = relationship("ChatThread")

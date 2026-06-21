@@ -7,3 +7,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("cobalt")
+
+class ModelNotFoundError(Exception):
+    def __init__(self, model: str):
+        self.model = model
+        super().__init__(f"Model '{model}' not found")

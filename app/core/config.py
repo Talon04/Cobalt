@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     environment: str = "development"
-    debug: bool = True
+    debug: bool = False
     
     database_url: str = "sqlite:///./cobalt.db"
     sqlalchemy_echo: bool = False
@@ -15,8 +15,4 @@ class Settings(BaseSettings):
     
     scheduler_enabled: bool = True
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-
 settings = Settings()

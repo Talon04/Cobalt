@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 from app.core.config import settings
-from app.core.logging import logger
+from app.core.logging import logger, ModelNotFoundError
 import json
 
 class OllamaService:
@@ -31,26 +31,42 @@ class OllamaService:
             raise
 
     async def stream_chat(self, messages: list[dict]):
-        """Stream chat response from Ollama as an async generator yielding parsed JSON lines."""
         try:
             async with self.client.stream(
                 "POST",
                 "/api/chat",
-                json={"model": self.model, "messages": messages, "stream": True},
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": True,
+                    "think": False,
+                },
             ) as response:
+
                 response.raise_for_status()
+
                 async for line in response.aiter_lines():
                     if not line:
                         continue
-                    # Ollama streams JSON lines; try to parse
+
                     try:
-                        chunk = json.loads(line)
+                        yield json.loads(line)
                     except Exception:
-                        # if not JSON, forward raw line
-                        chunk = {"raw": line}
-                    yield chunk
+                        yield {"raw": line}
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "Ollama returned %s for model %s",
+                e.response.status_code,
+                self.model,
+            )
+
+            raise ModelNotFoundError(self.model) \
+                if e.response.status_code == 404 \
+                else e
+
         except Exception as e:
-            logger.error(f"Ollama error: {e} for: {self.model}")
+            logger.exception("Ollama error")
             raise
 
     async def pull_model(self, model_name: str | None = None):
