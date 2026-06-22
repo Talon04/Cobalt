@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from threading import Lock
 
 import httpx
 from app.core.config import settings
@@ -19,6 +20,7 @@ class OllamaService:
     def __init__(self):
         self.base_url = settings.ollama_base_url
         self.model_store_path = Path(settings.ollama_model_store_path)
+        self.model_config_lock = Lock()
         self.model = self._load_model()
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=300.0)
         self.pull_task: asyncio.Task | None = None
@@ -30,26 +32,28 @@ class OllamaService:
         }
 
     def _load_model(self) -> str:
-        if not self.model_store_path.exists():
-            return settings.ollama_model
-        try:
-            with self.model_store_path.open() as handle:
-                stored = json.load(handle)
-            if isinstance(stored, dict) and isinstance(stored.get("current_model"), str):
-                model = stored["current_model"].strip()
-                if model:
-                    return model
-        except Exception as e:
-            logger.warning(f"Could not load model config from {self.model_store_path}: {e}")
+        with self.model_config_lock:
+            if not self.model_store_path.exists():
+                return settings.ollama_model
+            try:
+                with self.model_store_path.open(encoding="utf-8") as handle:
+                    stored = json.load(handle)
+                if isinstance(stored, dict) and isinstance(stored.get("current_model"), str):
+                    model = stored["current_model"].strip()
+                    if model:
+                        return model
+            except Exception as e:
+                logger.warning(f"Could not load model config from {self.model_store_path}: {e}")
         return settings.ollama_model
 
     def _save_model(self) -> None:
-        try:
-            self.model_store_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.model_store_path.open("w") as handle:
-                json.dump({"current_model": self.model}, handle)
-        except Exception as e:
-            logger.error(f"Could not persist model config to {self.model_store_path}: {e}")
+        with self.model_config_lock:
+            try:
+                self.model_store_path.parent.mkdir(parents=True, exist_ok=True)
+                with self.model_store_path.open("w", encoding="utf-8") as handle:
+                    json.dump({"current_model": self.model}, handle)
+            except Exception as e:
+                logger.error(f"Could not persist model config to {self.model_store_path}: {e}")
 
     def set_model(self, model: str) -> str:
         selected = model.strip()

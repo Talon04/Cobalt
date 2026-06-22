@@ -1,6 +1,20 @@
 let currentChatId = null;
 let isPullRunning = false;
 
+function appendSystemMessage(message, isError = false) {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+    const row = document.createElement("p");
+    if (isError) {
+        row.style.color = "red";
+    }
+    const strong = document.createElement("strong");
+    strong.textContent = "Cobalt:";
+    row.appendChild(strong);
+    row.appendChild(document.createTextNode(` ${message}`));
+    chat.appendChild(row);
+}
+
 function setAppModel(model) {
     const title = document.getElementById("app-title");
     if (title && model) {
@@ -40,14 +54,16 @@ async function loadModelOptions() {
     setAppModel(currentModel);
 }
 
-async function selectModel(model) {
+async function selectModel(model, updateTitle = true) {
     if (!model) return;
     await fetch("/chat/models/select", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
     });
-    setAppModel(model);
+    if (updateTitle) {
+        setAppModel(model);
+    }
 }
 
 async function loadChats(selectChatId = null) {
@@ -261,13 +277,12 @@ async function sendMessage() {
 }
 
 async function startModelPull(modelName) {
-    const chat = document.getElementById("chat");
     if (!modelName) return;
 
     isPullRunning = true;
     setSendingEnabled(false);
     setPullStatus(`Pulling ${modelName}... please wait.`);
-    chat.innerHTML += `<p><strong>Cobalt:</strong> Starting model pull for ${modelName}...</p>`;
+    appendSystemMessage(`Starting model pull for ${modelName}...`);
 
     try {
         const resp = await fetch("/chat/pull-model", {
@@ -278,18 +293,18 @@ async function startModelPull(modelName) {
         const data = await resp.json();
 
         if (data.ok && data.started) {
-            chat.innerHTML += `<p><strong>Cobalt:</strong> Pull started for ${data.model}. Waiting for completion...</p>`;
+            appendSystemMessage(`Pull started for ${data.model}. Waiting for completion...`);
             await waitForPullToFinish();
         } else if (data.ok) {
-            chat.innerHTML += `<p><strong>Cobalt:</strong> Pull already running for ${data.model}.</p>`;
+            appendSystemMessage(`Pull already running for ${data.model}.`);
             await waitForPullToFinish();
         } else {
-            chat.innerHTML += `<p style="color:red"><strong>Cobalt:</strong> Pull failed: ${data.error || data.status || "unknown error"}</p>`;
+            appendSystemMessage(`Pull failed: ${data.error || data.status || "unknown error"}`, true);
             setSendingEnabled(true);
             setPullStatus("", false);
         }
     } catch (e) {
-        chat.innerHTML += `<p style="color:red">Error pulling model: ${e}</p>`;
+        appendSystemMessage(`Error pulling model: ${e}`, true);
         setSendingEnabled(true);
         setPullStatus("", false);
     }
@@ -310,8 +325,6 @@ async function pullCustomModel() {
 }
 
 async function waitForPullToFinish() {
-    const chat = document.getElementById("chat");
-
     while (true) {
         try {
             const resp = await fetch("/chat/pull-model/status");
@@ -319,12 +332,12 @@ async function waitForPullToFinish() {
 
             if (!data.running) {
                 if (data.done) {
-                    chat.innerHTML += `<p><strong>Cobalt:</strong> Model ${data.model} is ready.</p>`;
+                    appendSystemMessage(`Model ${data.model} is ready.`);
                     setPullStatus(`Model ${data.model} is ready.`);
-                    await selectModel(data.model);
+                    await selectModel(data.model, false);
                     await loadModelOptions();
                 } else if (data.error) {
-                    chat.innerHTML += `<p style="color:red"><strong>Cobalt:</strong> Pull failed: ${data.error}</p>`;
+                    appendSystemMessage(`Pull failed: ${data.error}`, true);
                     setPullStatus(`Pull failed: ${data.error}`);
                 }
                 setSendingEnabled(true);
@@ -335,7 +348,7 @@ async function waitForPullToFinish() {
             setPullStatus(`Pulling ${data.model}... still working.`);
             await new Promise((resolve) => setTimeout(resolve, 3000));
         } catch (e) {
-            chat.innerHTML += `<p style="color:red">Error checking pull status: ${e}</p>`;
+            appendSystemMessage(`Error checking pull status: ${e}`, true);
             setSendingEnabled(true);
             setPullStatus("", false);
             isPullRunning = false;
