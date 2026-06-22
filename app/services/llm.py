@@ -1,14 +1,25 @@
 import asyncio
+import json
+from pathlib import Path
 
 import httpx
 from app.core.config import settings
 from app.core.logging import logger, ModelNotFoundError
-import json
+
+
+STANDARD_MODELS = [
+    "qwen3:14b",
+    "llama3.1:8b",
+    "mistral:7b",
+    "phi4",
+]
+
 
 class OllamaService:
     def __init__(self):
         self.base_url = settings.ollama_base_url
-        self.model = settings.ollama_model
+        self.model_store_path = Path(settings.ollama_model_store_path)
+        self.model = self._load_model()
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=300.0)
         self.pull_task: asyncio.Task | None = None
         self.pull_status = {
@@ -17,13 +28,57 @@ class OllamaService:
             "error": None,
             "done": False,
         }
-    
+
+    def _load_model(self) -> str:
+        if not self.model_store_path.exists():
+            return settings.ollama_model
+        try:
+            with self.model_store_path.open() as handle:
+                stored = json.load(handle)
+            if isinstance(stored, dict) and isinstance(stored.get("current_model"), str):
+                model = stored["current_model"].strip()
+                if model:
+                    return model
+        except Exception as e:
+            logger.warning(f"Could not load model config from {self.model_store_path}: {e}")
+        return settings.ollama_model
+
+    def _save_model(self) -> None:
+        try:
+            self.model_store_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.model_store_path.open("w") as handle:
+                json.dump({"current_model": self.model}, handle)
+        except Exception as e:
+            logger.error(f"Could not persist model config to {self.model_store_path}: {e}")
+
+    def set_model(self, model: str) -> str:
+        selected = model.strip()
+        if not selected:
+            raise ValueError("Model cannot be empty")
+        self.model = selected
+        self._save_model()
+        return self.model
+
+    async def list_installed_models(self) -> list[str]:
+        try:
+            resp = await self.client.get("/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            models = data.get("models", [])
+            names: list[str] = []
+            for model in models:
+                if isinstance(model, dict) and isinstance(model.get("name"), str):
+                    names.append(model["name"])
+            return names
+        except Exception as e:
+            logger.warning(f"Could not fetch installed models from Ollama: {e}")
+            return []
+
     async def chat(self, messages: list[dict], stream: bool = False):
         """Send message to Ollama"""
         try:
             resp = await self.client.post(
-                "/api/chat",
-                json={"model": self.model, "messages": messages, "stream": stream}
+                "/api/chat", json={"model": self.model, "messages": messages, "stream": stream}
             )
             return resp
         except Exception as e:
@@ -65,7 +120,7 @@ class OllamaService:
                 if e.response.status_code == 404 \
                 else e
 
-        except Exception as e:
+        except Exception:
             logger.exception("Ollama error")
             raise
 
@@ -103,8 +158,9 @@ class OllamaService:
 
     def pull_state(self) -> dict:
         return self.pull_status
-    
+
     async def close(self):
         await self.client.aclose()
+
 
 ollama_service = OllamaService()

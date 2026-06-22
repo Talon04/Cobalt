@@ -1,21 +1,21 @@
 
 import asyncio
 
-from app.core.logging import ModelNotFoundError
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.db import BackgroundJob, ChatThread, ChatPrompt
+from app.db.models.db import ChatThread
 from app.db.models.schemas import (
     ChatMessageSchema,
-    ChatResponseSchema,
     ChatThreadCreateSchema,
     ChatThreadSchema,
     ChatMessageOutSchema,
+    ModelPullRequestSchema,
+    ModelSelectRequestSchema,
 )
-from app.services.llm import ollama_service
+from app.services.llm import STANDARD_MODELS, ollama_service
 from app.services.db import get_db
 from app.core import worker as worker_service
 
@@ -53,7 +53,6 @@ async def get_chat_messages(chat_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/send")
 async def send_message(prompt: ChatMessageSchema):
-    from app.core.builder import build_full_prompt
     from app.db.db_manager import save_prompt, new_background_job
 
     prompt_id = save_prompt(prompt)
@@ -162,9 +161,10 @@ async def send_message_stream(msg: ChatMessageSchema, db: AsyncSession = Depends
 
 
 @router.post("/pull-model")
-async def pull_model():
-    """Pull the configured Ollama model."""
-    data = await ollama_service.pull_model()
+async def pull_model(payload: ModelPullRequestSchema | None = None):
+    """Pull a model from Ollama."""
+    requested_model = payload.model if payload else None
+    data = await ollama_service.pull_model(requested_model)
     return {
         "ok": True,
         "model": data.get("model", ollama_service.model),
@@ -178,3 +178,26 @@ async def pull_model_status():
     """Return the current model pull status."""
     return ollama_service.pull_state()
 
+
+@router.get("/models")
+async def list_models():
+    installed_models = await ollama_service.list_installed_models()
+    selectable_models: list[str] = []
+    for model in installed_models + STANDARD_MODELS + [ollama_service.model]:
+        if model and model not in selectable_models:
+            selectable_models.append(model)
+    return {
+        "current_model": ollama_service.model,
+        "installed_models": installed_models,
+        "standard_models": STANDARD_MODELS,
+        "models": selectable_models,
+    }
+
+
+@router.post("/models/select")
+async def select_model(payload: ModelSelectRequestSchema):
+    try:
+        selected = ollama_service.set_model(payload.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "current_model": selected}

@@ -8,6 +8,48 @@ function setAppModel(model) {
     }
 }
 
+async function loadModelOptions() {
+    const select = document.getElementById("model-select");
+    if (!select) return;
+
+    const resp = await fetch("/chat/models");
+    const data = await resp.json();
+    const currentModel = data.current_model;
+    const installed = new Set(data.installed_models || []);
+    const standard = new Set(data.standard_models || []);
+
+    select.innerHTML = "";
+    (data.models || []).forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model;
+
+        if (installed.has(model)) {
+            option.textContent = model;
+        } else if (standard.has(model)) {
+            option.textContent = `${model} (download)`;
+        } else {
+            option.textContent = `${model} (custom)`;
+        }
+
+        if (model === currentModel) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+
+    setAppModel(currentModel);
+}
+
+async function selectModel(model) {
+    if (!model) return;
+    await fetch("/chat/models/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+    });
+    setAppModel(model);
+}
+
 async function loadChats(selectChatId = null) {
     const resp = await fetch("/chat/chats");
     const chats = await resp.json();
@@ -79,6 +121,11 @@ function setSendingEnabled(enabled) {
     const sendButton = document.getElementById("send-button");
     const input = document.getElementById("input");
     const newChatButton = document.getElementById("new-chat-button");
+    const modelSelect = document.getElementById("model-select");
+    const pullSelected = document.getElementById("pull-selected-model-button");
+    const pullCustom = document.getElementById("pull-custom-model-button");
+    const customInput = document.getElementById("custom-model-input");
+
     if (sendButton) {
         sendButton.disabled = !enabled;
     }
@@ -87,6 +134,18 @@ function setSendingEnabled(enabled) {
     }
     if (newChatButton) {
         newChatButton.disabled = !enabled;
+    }
+    if (modelSelect) {
+        modelSelect.disabled = !enabled;
+    }
+    if (pullSelected) {
+        pullSelected.disabled = !enabled;
+    }
+    if (pullCustom) {
+        pullCustom.disabled = !enabled;
+    }
+    if (customInput) {
+        customInput.disabled = !enabled;
     }
 }
 
@@ -100,23 +159,23 @@ function setPullStatus(message, visible = true) {
 async function sendMessage() {
     const input = document.getElementById("input");
     const chat = document.getElementById("chat");
-    
+
     const msg = input.value;
     if (!msg) return;
     if (!currentChatId) {
         await loadChats();
         return;
     }
-    
+
     chat.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
     input.value = "";
     setSendingEnabled(false);
-    
+
     try {
         const resp = await fetch("/chat/send-stream", {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({chat_id: currentChatId, role: "user", content: msg, model: null})
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: currentChatId, role: "user", content: msg, model: null }),
         });
 
         if (!resp.ok) {
@@ -129,14 +188,14 @@ async function sendMessage() {
             return;
         }
 
-        const assistantElem = document.createElement('p');
+        const assistantElem = document.createElement("p");
         assistantElem.innerHTML = `<strong>Cobalt: </strong> <span class="streaming"></span>`;
         chat.appendChild(assistantElem);
-        const streamSpan = assistantElem.querySelector('.streaming');
+        const streamSpan = assistantElem.querySelector(".streaming");
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
+        let buffer = "";
 
         let streamEnded = false;
         while (true) {
@@ -144,36 +203,34 @@ async function sendMessage() {
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
 
-            let parts = buffer.split('\n\n');
+            const parts = buffer.split("\n\n");
             buffer = parts.pop();
             for (const part of parts) {
-                const lines = part.split('\n');
+                const lines = part.split("\n");
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
+                    if (line.startsWith("data: ")) {
                         try {
-                            const payload = JSON.parse(line.replace(/^data: /, ''));
-                            
-                            if (payload.type === 'connected') {
-                                // Connection established, worker starting
+                            const payload = JSON.parse(line.replace(/^data: /, ""));
+
+                            if (payload.type === "connected") {
                                 console.log("Stream connected, job_id:", payload.job_id);
                                 continue;
                             }
-                            
-                            if (payload.type === 'meta' && payload.model) {
+
+                            if (payload.type === "meta" && payload.model) {
                                 setAppModel(payload.model);
                                 continue;
                             }
-                            
-                            if (payload.type === 'keepalive') {
-                                // Ignore keepalive events
+
+                            if (payload.type === "keepalive") {
                                 continue;
                             }
-                            
-                            if (payload.type === 'stream_done' || payload.type === 'done') {
+
+                            if (payload.type === "stream_done" || payload.type === "done") {
                                 streamEnded = true;
                                 break;
                             }
-                            
+
                             if (payload.error) {
                                 const err = payload.error;
                                 chat.innerHTML += `<p style="color:red"><strong>Error:</strong> ${err}</p>`;
@@ -181,11 +238,11 @@ async function sendMessage() {
                                 streamEnded = true;
                                 break;
                             }
-                            
+
                             if (payload.content) {
                                 streamSpan.textContent += payload.content;
                             }
-                        } catch (e) {
+                        } catch {
                             // ignore malformed chunks
                         }
                     }
@@ -203,15 +260,21 @@ async function sendMessage() {
     }
 }
 
-async function pullModel() {
+async function startModelPull(modelName) {
     const chat = document.getElementById("chat");
+    if (!modelName) return;
+
     isPullRunning = true;
     setSendingEnabled(false);
-    setPullStatus("Pulling model... please wait.");
-    chat.innerHTML += `<p><strong>Cobalt:</strong> Starting model pull...</p>`;
+    setPullStatus(`Pulling ${modelName}... please wait.`);
+    chat.innerHTML += `<p><strong>Cobalt:</strong> Starting model pull for ${modelName}...</p>`;
 
     try {
-        const resp = await fetch("/chat/pull-model", { method: "POST" });
+        const resp = await fetch("/chat/pull-model", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: modelName }),
+        });
         const data = await resp.json();
 
         if (data.ok && data.started) {
@@ -232,6 +295,20 @@ async function pullModel() {
     }
 }
 
+async function pullSelectedModel() {
+    const select = document.getElementById("model-select");
+    if (!select || !select.value) return;
+    await startModelPull(select.value);
+}
+
+async function pullCustomModel() {
+    const input = document.getElementById("custom-model-input");
+    if (!input) return;
+    const model = input.value.trim();
+    if (!model) return;
+    await startModelPull(model);
+}
+
 async function waitForPullToFinish() {
     const chat = document.getElementById("chat");
 
@@ -244,6 +321,8 @@ async function waitForPullToFinish() {
                 if (data.done) {
                     chat.innerHTML += `<p><strong>Cobalt:</strong> Model ${data.model} is ready.</p>`;
                     setPullStatus(`Model ${data.model} is ready.`);
+                    await selectModel(data.model);
+                    await loadModelOptions();
                 } else if (data.error) {
                     chat.innerHTML += `<p style="color:red"><strong>Cobalt:</strong> Pull failed: ${data.error}</p>`;
                     setPullStatus(`Pull failed: ${data.error}`);
@@ -265,21 +344,7 @@ async function waitForPullToFinish() {
     }
 }
 
-function showPullModelButton() {
-    const btn = document.getElementById("pull-model-button");
-    if (btn) {
-        btn.classList.remove("hidden");
-        btn.disabled = false;
-    }
-}
-
-function hidePullModelButton() {
-    const btn = document.getElementById("pull-model-button");
-    if (btn) {
-        btn.classList.add("hidden");
-    }
-}
-
 window.addEventListener("DOMContentLoaded", async () => {
+    await loadModelOptions();
     await loadChats();
 });
