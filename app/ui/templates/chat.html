@@ -11,13 +11,16 @@
             <select id="chat-select" onchange="switchChat(this.value)"></select>
             <button id="new-chat-button" onclick="createNewChat()">New chat</button>
         </div>
+        <div class="model-bar">
+            <select id="model-select" onchange="selectModel(this.value)"></select>
+            <button id="pull-selected-model-button" onclick="pullSelectedModel()">Pull selected</button>
+            <input type="text" id="custom-model-input" placeholder="Type model to pull (e.g. llama3.1:8b)">
+            <button id="pull-custom-model-button" onclick="pullCustomModel()">Pull typed model</button>
+        </div>
         <div id="pull-status" class="status hidden"></div>
         <div id="chat"></div>
         <input type="text" id="input" placeholder="Ask me anything...">
         <button id="send-button" onclick="sendMessage()">Send</button>
-        <button id="pull-model-button" onclick="pullModel()" class="hidden">
-             Pull Model
-        </button>
     </div>
     <script src="/static/app.js"></script>
 </body>

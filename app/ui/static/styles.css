@@ -17,6 +17,13 @@ body {
     align-items: center;
 }
 
+.model-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 #chat {
     border: 1px solid #ddd;
     padding: 10px;
@@ -56,6 +63,10 @@ body {
 input {
     padding: 10px;
     font-size: 1rem;
+}
+
+#custom-model-input {
+    min-width: 260px;
 }
 
 button {

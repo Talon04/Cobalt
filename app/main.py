@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from contextlib import asynccontextmanager
 from app.api.router import router
 from app.core.lifespan import lifespan
 from app.core.logging import logger
 from app.core.config import settings
+from app.services.llm import ollama_service
 
 app = FastAPI(title="Cobalt", lifespan=lifespan)
 
@@ -22,7 +22,7 @@ app.include_router(router)
 async def index():
     """Serve UI"""
     with open("app/ui/templates/chat.html") as f:
-        return f.read().replace("{{MODEL_NAME}}", settings.ollama_model)
+        return f.read().replace("{{MODEL_NAME}}", ollama_service.model)
 
 if __name__ == "__main__":
     import uvicorn
