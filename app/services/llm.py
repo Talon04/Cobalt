@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+import re
 from threading import Lock
 
 import httpx
@@ -59,6 +60,8 @@ class OllamaService:
         selected = model.strip()
         if not selected:
             raise ValueError("Model cannot be empty")
+        if not re.fullmatch(r"[A-Za-z0-9._:/-]+", selected):
+            raise ValueError("Model contains invalid characters")
         self.model = selected
         self._save_model()
         return self.model
@@ -125,7 +128,7 @@ class OllamaService:
                 else e
 
         except Exception:
-            logger.exception("Ollama error")
+            logger.exception("Ollama streaming request failed")
             raise
 
     async def pull_model(self, model_name: str | None = None):

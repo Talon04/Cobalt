@@ -15,6 +15,19 @@ function appendSystemMessage(message, isError = false) {
     chat.appendChild(row);
 }
 
+function ensureModelOption(model) {
+    const select = document.getElementById("model-select");
+    if (!select || !model) return;
+    const exists = Array.from(select.options).some((option) => option.value === model);
+    if (!exists) {
+        const option = document.createElement("option");
+        option.value = model;
+        option.textContent = model;
+        select.appendChild(option);
+    }
+    select.value = model;
+}
+
 function setAppModel(model) {
     const title = document.getElementById("app-title");
     if (title && model) {
@@ -26,43 +39,59 @@ async function loadModelOptions() {
     const select = document.getElementById("model-select");
     if (!select) return;
 
-    const resp = await fetch("/chat/models");
-    const data = await resp.json();
-    const currentModel = data.current_model;
-    const installed = new Set(data.installed_models || []);
-    const standard = new Set(data.standard_models || []);
-
-    select.innerHTML = "";
-    (data.models || []).forEach((model) => {
-        const option = document.createElement("option");
-        option.value = model;
-
-        if (installed.has(model)) {
-            option.textContent = model;
-        } else if (standard.has(model)) {
-            option.textContent = `${model} (download)`;
-        } else {
-            option.textContent = `${model} (custom)`;
+    try {
+        const resp = await fetch("/chat/models");
+        if (!resp.ok) {
+            throw new Error(await resp.text());
         }
+        const data = await resp.json();
+        const currentModel = data.current_model;
+        const installed = new Set(data.installed_models || []);
+        const standard = new Set(data.standard_models || []);
 
-        if (model === currentModel) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
+        select.innerHTML = "";
+        (data.models || []).forEach((model) => {
+            const option = document.createElement("option");
+            option.value = model;
 
-    setAppModel(currentModel);
+            if (installed.has(model)) {
+                option.textContent = model;
+            } else if (standard.has(model)) {
+                option.textContent = `${model} (download)`;
+            } else {
+                option.textContent = `${model} (custom)`;
+            }
+
+            if (model === currentModel) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        setAppModel(currentModel);
+    } catch (e) {
+        setPullStatus(`Failed to load models: ${e}`);
+    }
 }
 
 async function selectModel(model, updateTitle = true) {
     if (!model) return;
-    await fetch("/chat/models/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model }),
-    });
-    if (updateTitle) {
-        setAppModel(model);
+    try {
+        const resp = await fetch("/chat/models/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model }),
+        });
+        if (!resp.ok) {
+            throw new Error(await resp.text());
+        }
+        if (updateTitle) {
+            setAppModel(model);
+        }
+        ensureModelOption(model);
+    } catch (e) {
+        appendSystemMessage(`Failed to select model: ${e}`, true);
+        throw e;
     }
 }
 
@@ -335,7 +364,8 @@ async function waitForPullToFinish() {
                     appendSystemMessage(`Model ${data.model} is ready.`);
                     setPullStatus(`Model ${data.model} is ready.`);
                     await selectModel(data.model, false);
-                    await loadModelOptions();
+                    ensureModelOption(data.model);
+                    setAppModel(data.model);
                 } else if (data.error) {
                     appendSystemMessage(`Pull failed: ${data.error}`, true);
                     setPullStatus(`Pull failed: ${data.error}`);
