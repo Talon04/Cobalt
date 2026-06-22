@@ -28,6 +28,18 @@ function ensureModelOption(model) {
     select.value = model;
 }
 
+async function readErrorMessage(resp, fallbackMessage) {
+    try {
+        const data = await resp.json();
+        if (typeof data?.detail === "string" && data.detail.trim()) {
+            return data.detail;
+        }
+    } catch {
+        // ignore invalid error payload
+    }
+    return fallbackMessage;
+}
+
 function setAppModel(model) {
     const title = document.getElementById("app-title");
     if (title && model) {
@@ -42,7 +54,7 @@ async function loadModelOptions() {
     try {
         const resp = await fetch("/chat/models");
         if (!resp.ok) {
-            throw new Error(await resp.text());
+            throw new Error(await readErrorMessage(resp, "Unable to load models"));
         }
         const data = await resp.json();
         const currentModel = data.current_model;
@@ -83,7 +95,7 @@ async function selectModel(model, updateTitle = true) {
             body: JSON.stringify({ model }),
         });
         if (!resp.ok) {
-            throw new Error(await resp.text());
+            throw new Error(await readErrorMessage(resp, "Unable to select model"));
         }
         if (updateTitle) {
             setAppModel(model);
@@ -363,9 +375,7 @@ async function waitForPullToFinish() {
                 if (data.done) {
                     appendSystemMessage(`Model ${data.model} is ready.`);
                     setPullStatus(`Model ${data.model} is ready.`);
-                    await selectModel(data.model, false);
-                    ensureModelOption(data.model);
-                    setAppModel(data.model);
+                    await selectModel(data.model, true);
                 } else if (data.error) {
                     appendSystemMessage(`Pull failed: ${data.error}`, true);
                     setPullStatus(`Pull failed: ${data.error}`);

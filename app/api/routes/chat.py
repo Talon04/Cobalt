@@ -161,9 +161,9 @@ async def send_message_stream(msg: ChatMessageSchema, db: AsyncSession = Depends
 
 
 @router.post("/pull-model")
-async def pull_model(payload: ModelPullRequestSchema | None = None):
+async def pull_model(payload: ModelPullRequestSchema):
     """Pull a model from Ollama; defaults to the currently selected model."""
-    requested_model = (payload.model if payload else None) or ollama_service.model
+    requested_model = payload.model or ollama_service.model
     data = await ollama_service.pull_model(requested_model)
     return {
         "ok": True,

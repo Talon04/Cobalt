@@ -20,7 +20,7 @@ STANDARD_MODELS = [
 class OllamaService:
     def __init__(self):
         self.base_url = settings.ollama_base_url
-        self.model_store_path = Path(settings.ollama_model_store_path)
+        self.model_store_path = self._resolve_model_store_path(settings.ollama_model_store_path)
         self.model_config_lock = Lock()
         self.model = self._load_model()
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=300.0)
@@ -31,6 +31,14 @@ class OllamaService:
             "error": None,
             "done": False,
         }
+
+    def _resolve_model_store_path(self, configured_path: str) -> Path:
+        base_dir = Path.cwd().resolve()
+        resolved = (base_dir / configured_path).resolve()
+        if base_dir not in resolved.parents and resolved != base_dir:
+            logger.warning("Invalid model store path outside repository; falling back to ./model_config.json")
+            return (base_dir / "model_config.json").resolve()
+        return resolved
 
     def _load_model(self) -> str:
         with self.model_config_lock:
