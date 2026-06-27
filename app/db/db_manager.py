@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.db.models.db import Base, ChatPrompt, BackgroundJob, ChatThread
@@ -132,6 +132,39 @@ async def save_chat_message_async(chat_id, role, content, model=None):
         await session.commit()
         await session.refresh(message)
         return message
+
+
+async def is_first_user_prompt_async(chat_id: int, prompt_id: int) -> bool:
+    """Return True when the given prompt is the first user message in the chat."""
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(func.count(ChatPrompt.id)).where(
+                ChatPrompt.chat_id == chat_id,
+                ChatPrompt.role == "user",
+                ChatPrompt.id <= prompt_id,
+            )
+        )
+        user_count = result.scalar_one()
+        return user_count == 1
+
+
+async def update_chat_title_async(chat_id: int, title: str) -> None:
+    """Update a chat title with a normalized value."""
+
+    normalized = " ".join(title.split())[:255]
+    if not normalized:
+        return
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(ChatThread).where(ChatThread.id == chat_id))
+        chat = result.scalars().first()
+        if not chat:
+            return
+        chat.title = normalized
+        await session.commit()
+
+
 def new_background_job(prompt_id):
     """Create a new background job entry in the database"""
     session = get_db_session()

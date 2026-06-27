@@ -1,12 +1,14 @@
 import asyncio
 
-from app.core.builder import build_full_prompt
+from app.core.builder import build_first_message_summary_prompt, build_full_prompt
 from app.db.db_manager import (
     get_pending_jobs_async,
     update_job_status_async,
     get_prompt_async,
     get_chat_async,
+    is_first_user_prompt_async,
     save_chat_message_async,
+    update_chat_title_async,
 )
 from app.core.logging import logger
 
@@ -120,6 +122,14 @@ def extract(chunk):
         return str(chunk)
 
 
+def _normalize_summary_title(raw_title: str) -> str:
+    cleaned = " ".join(raw_title.split())
+    if not cleaned:
+        return ""
+    words = cleaned.split(" ")
+    return " ".join(words[:4])[:255]
+
+
 async def run_chat_job(job_id):
     try:
         logger.info(f"Starting job {job_id}")
@@ -144,6 +154,12 @@ async def run_chat_job(job_id):
 
         logger.info(f"Building prompt for job {job_id}, chat {chat.id}")
         full_prompt = await build_full_prompt(chat_id=chat.id)
+        should_summarize_title = (
+            chat.title == "New chat"
+            and prompt.role == "user"
+            and bool(prompt.content)
+            and await is_first_user_prompt_async(chat.id, prompt.id)
+        )
         accumulated = ""
         response_model = None
         sent_model = False
@@ -170,6 +186,20 @@ async def run_chat_job(job_id):
             f"Streaming complete for job {job_id}, {chunk_count} chunks, {len(accumulated)} total chars"
         )
         await save_chat_message_async(chat.id, "assistant", accumulated, response_model)
+
+        if should_summarize_title:
+            try:
+                summary_prompt = build_first_message_summary_prompt(prompt.content)
+                summary = await ollama_service.summarize_first_message(summary_prompt)
+                summary_title = _normalize_summary_title(summary)
+                if summary_title:
+                    await update_chat_title_async(chat.id, summary_title)
+            except Exception:
+                logger.exception(
+                    "Failed to summarize first message for chat title (chat=%s)",
+                    chat.id,
+                )
+
         await update_job_status_async(job_id, "done")
         await _finish_stream(job_id)
         logger.info(f"Job {job_id} completed successfully")

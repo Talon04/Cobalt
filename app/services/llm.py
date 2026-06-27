@@ -103,6 +103,30 @@ class OllamaService:
             logger.error(f"Ollama error: {e} for: {self.model}")
             raise
 
+    async def summarize_first_message(self, messages: list[dict]) -> str:
+        try:
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": False,
+                    "think": False,
+                    "options": {"temperature": 0.1, "top_p": 0.2, "num_predict": 16},
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            message = data.get("message") if isinstance(data, dict) else None
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str):
+                    return content.strip()
+            return ""
+        except Exception as e:
+            logger.error(f"Ollama summary error: {e} for: {self.model}")
+            raise
+
     async def stream_chat(self, messages: list[dict]):
         try:
             async with self.client.stream(

@@ -17,6 +17,25 @@ async def build_history(chat_id: int):
         })
 
     return history
+
+
 async def build_full_prompt(chat_id: int):
     full_prompt = await build_history(chat_id=chat_id)
     return full_prompt
+
+
+def build_first_message_summary_prompt(message: str) -> list[dict[str, str]]:
+    content = message.strip()
+    return [
+        {
+            "role": "system",
+            "content": (
+                "Generate a concise chat title using exactly 4 words. "
+                "Return only the title text."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Make a 4 word summary out of this:\n{content}",
+        },
+    ]
