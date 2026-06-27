@@ -62,12 +62,12 @@ async def run_model_pull_job(model_name: str) -> None:
             "error": None,
             "done": True,
         }
-    except Exception as e:
+    except Exception:
         logger.exception("Error pulling model %s", model_name)
         model_pull_status = {
             "running": False,
             "model": model_name,
-            "error": str(e),
+            "error": "Model pull failed. Check server logs for details.",
             "done": False,
         }
 
