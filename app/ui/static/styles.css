@@ -11,6 +11,11 @@ body {
     gap: 10px;
 }
 
+.nav-links {
+    display: flex;
+    gap: 10px;
+}
+
 .chat-bar {
     display: flex;
     gap: 10px;
@@ -77,4 +82,10 @@ button {
 select {
     padding: 10px;
     min-width: 220px;
+}
+
+#messages {
+    border: 1px solid #ddd;
+    padding: 10px;
+    min-height: 120px;
 }
