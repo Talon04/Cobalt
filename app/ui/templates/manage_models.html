@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Models - Cobalt</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1 id="app-title">Manage models - {{MODEL_NAME}}</h1>
+        <div class="nav-links">
+            <a href="/">Back to chat</a>
+        </div>
+        <div class="model-bar">
+            <select id="model-select" onchange="selectModel(this.value)"></select>
+            <button id="pull-selected-model-button" onclick="pullSelectedModel()">Pull selected</button>
+            <input type="text" id="custom-model-input" placeholder="Type model to pull (e.g. llama3.1:8b)">
+            <button id="pull-custom-model-button" onclick="pullCustomModel()">Pull typed model</button>
+        </div>
+        <div id="pull-status" class="status hidden"></div>
+        <div id="messages"></div>
+    </div>
+    <script src="/static/manage-models.js"></script>
+</body>
+</html>

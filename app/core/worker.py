@@ -14,6 +14,13 @@ from app.services.llm import ollama_service
 
 
 job_streams: dict[int, asyncio.Queue] = {}
+model_pull_task: asyncio.Task | None = None
+model_pull_status: dict = {
+    "running": False,
+    "model": None,
+    "error": None,
+    "done": False,
+}
 
 
 def register_job_stream(job_id: int) -> asyncio.Queue:
@@ -39,6 +46,54 @@ async def _finish_stream(job_id: int) -> None:
     job_streams.pop(job_id, None)
 
 
+async def run_model_pull_job(model_name: str) -> None:
+    global model_pull_status
+    model_pull_status = {
+        "running": True,
+        "model": model_name,
+        "error": None,
+        "done": False,
+    }
+    try:
+        await ollama_service.pull_model(model_name)
+        model_pull_status = {
+            "running": False,
+            "model": model_name,
+            "error": None,
+            "done": True,
+        }
+    except Exception as e:
+        logger.exception("Error pulling model %s", model_name)
+        model_pull_status = {
+            "running": False,
+            "model": model_name,
+            "error": str(e),
+            "done": False,
+        }
+
+
+def start_model_pull(model_name: str) -> dict:
+    global model_pull_task, model_pull_status
+    if model_pull_task and not model_pull_task.done():
+        return {
+            "started": False,
+            "model": model_pull_status.get("model"),
+            "status": "already-running",
+        }
+    model_pull_status = {
+        "running": False,
+        "model": model_name,
+        "error": None,
+        "done": False,
+    }
+    model_pull_task = asyncio.create_task(run_model_pull_job(model_name))
+    return {"started": True, "model": model_name, "status": "running"}
+
+
+def get_model_pull_status() -> dict:
+    return model_pull_status
+
+
 async def worker_loop():
     while True:
         try:
@@ -57,7 +112,9 @@ def extract(chunk):
     if isinstance(chunk, dict):
         message = chunk.get("message") or {}
         if isinstance(message, dict):
-            return message.get("content") or chunk.get("content") or chunk.get("raw") or ""
+            return (
+                message.get("content") or chunk.get("content") or chunk.get("raw") or ""
+            )
         return chunk.get("content") or chunk.get("raw") or ""
     else:
         return str(chunk)
@@ -66,7 +123,7 @@ def extract(chunk):
 async def run_chat_job(job_id):
     try:
         logger.info(f"Starting job {job_id}")
-        
+
         prompt = await get_prompt_async(job_id)
         if not prompt:
             logger.error(f"No prompt found for job {job_id}")
@@ -78,7 +135,9 @@ async def run_chat_job(job_id):
         chat = await get_chat_async(job_id)
         if not chat:
             logger.error(f"No chat found for job {job_id}")
-            await update_job_status_async(job_id, "failed", error="No chat found for prompt")
+            await update_job_status_async(
+                job_id, "failed", error="No chat found for prompt"
+            )
             await _emit(job_id, {"type": "error", "error": "No chat found for prompt"})
             await _finish_stream(job_id)
             return
@@ -102,10 +161,14 @@ async def run_chat_job(job_id):
                 await _emit(job_id, {"type": "meta", "model": response_model})
             if content:
                 accumulated += content
-                logger.debug(f"Emitting chunk {chunk_count} ({len(content)} chars) for job {job_id}")
+                logger.debug(
+                    f"Emitting chunk {chunk_count} ({len(content)} chars) for job {job_id}"
+                )
                 await _emit(job_id, {"type": "chunk", "content": content})
 
-        logger.info(f"Streaming complete for job {job_id}, {chunk_count} chunks, {len(accumulated)} total chars")
+        logger.info(
+            f"Streaming complete for job {job_id}, {chunk_count} chunks, {len(accumulated)} total chars"
+        )
         await save_chat_message_async(chat.id, "assistant", accumulated, response_model)
         await update_job_status_async(job_id, "done")
         await _finish_stream(job_id)

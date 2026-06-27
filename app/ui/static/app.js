@@ -1,5 +1,4 @@
 let currentChatId = null;
-let isPullRunning = false;
 
 function appendSystemMessage(message, isError = false) {
     const chat = document.getElementById("chat");
@@ -82,7 +81,7 @@ async function loadModelOptions() {
 
         setAppModel(currentModel);
     } catch (e) {
-        setPullStatus(`Failed to load models: ${e}`);
+        appendSystemMessage(`Failed to load models: ${e}`, true);
     }
 }
 
@@ -142,7 +141,6 @@ async function loadChats(selectChatId = null) {
 async function loadChatMessages(chatId) {
     const chat = document.getElementById("chat");
     chat.innerHTML = "";
-    setPullStatus("", false);
     setSendingEnabled(true);
 
     const resp = await fetch(`/chat/chats/${chatId}/messages`);
@@ -160,8 +158,6 @@ async function loadChatMessages(chatId) {
 async function switchChat(chatId) {
     if (!chatId) return;
     currentChatId = Number(chatId);
-    isPullRunning = false;
-    setPullStatus("", false);
     await loadChatMessages(currentChatId);
 }
 
@@ -179,9 +175,6 @@ function setSendingEnabled(enabled) {
     const input = document.getElementById("input");
     const newChatButton = document.getElementById("new-chat-button");
     const modelSelect = document.getElementById("model-select");
-    const pullSelected = document.getElementById("pull-selected-model-button");
-    const pullCustom = document.getElementById("pull-custom-model-button");
-    const customInput = document.getElementById("custom-model-input");
 
     if (sendButton) {
         sendButton.disabled = !enabled;
@@ -195,22 +188,6 @@ function setSendingEnabled(enabled) {
     if (modelSelect) {
         modelSelect.disabled = !enabled;
     }
-    if (pullSelected) {
-        pullSelected.disabled = !enabled;
-    }
-    if (pullCustom) {
-        pullCustom.disabled = !enabled;
-    }
-    if (customInput) {
-        customInput.disabled = !enabled;
-    }
-}
-
-function setPullStatus(message, visible = true) {
-    const status = document.getElementById("pull-status");
-    if (!status) return;
-    status.textContent = message;
-    status.classList.toggle("hidden", !visible);
 }
 
 async function sendMessage() {
@@ -314,86 +291,6 @@ async function sendMessage() {
     } catch (e) {
         chat.innerHTML += `<p style="color:red">Error: ${e}</p>`;
         setSendingEnabled(true);
-    }
-}
-
-async function startModelPull(modelName) {
-    if (!modelName) return;
-
-    isPullRunning = true;
-    setSendingEnabled(false);
-    setPullStatus(`Pulling ${modelName}... please wait.`);
-    appendSystemMessage(`Starting model pull for ${modelName}...`);
-
-    try {
-        const resp = await fetch("/chat/pull-model", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: modelName }),
-        });
-        const data = await resp.json();
-
-        if (data.ok && data.started) {
-            appendSystemMessage(`Pull started for ${data.model}. Waiting for completion...`);
-            await waitForPullToFinish();
-        } else if (data.ok) {
-            appendSystemMessage(`Pull already running for ${data.model}.`);
-            await waitForPullToFinish();
-        } else {
-            appendSystemMessage(`Pull failed: ${data.error || data.status || "unknown error"}`, true);
-            setSendingEnabled(true);
-            setPullStatus("", false);
-        }
-    } catch (e) {
-        appendSystemMessage(`Error pulling model: ${e}`, true);
-        setSendingEnabled(true);
-        setPullStatus("", false);
-    }
-}
-
-async function pullSelectedModel() {
-    const select = document.getElementById("model-select");
-    if (!select || !select.value) return;
-    await startModelPull(select.value);
-}
-
-async function pullCustomModel() {
-    const input = document.getElementById("custom-model-input");
-    if (!input) return;
-    const model = input.value.trim();
-    if (!model) return;
-    await startModelPull(model);
-}
-
-async function waitForPullToFinish() {
-    while (true) {
-        try {
-            const resp = await fetch("/chat/pull-model/status");
-            const data = await resp.json();
-
-            if (!data.running) {
-                if (data.done) {
-                    appendSystemMessage(`Model ${data.model} is ready.`);
-                    setPullStatus(`Model ${data.model} is ready.`);
-                    await selectModel(data.model, true);
-                } else if (data.error) {
-                    appendSystemMessage(`Pull failed: ${data.error}`, true);
-                    setPullStatus(`Pull failed: ${data.error}`);
-                }
-                setSendingEnabled(true);
-                isPullRunning = false;
-                return;
-            }
-
-            setPullStatus(`Pulling ${data.model}... still working.`);
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-        } catch (e) {
-            appendSystemMessage(`Error checking pull status: ${e}`, true);
-            setSendingEnabled(true);
-            setPullStatus("", false);
-            isPullRunning = false;
-            return;
-        }
     }
 }
 

@@ -18,12 +18,22 @@ except Exception as e:
 # Routes
 app.include_router(router)
 
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """Serve UI"""
     with open("app/ui/templates/chat.html") as f:
         return f.read().replace("{{MODEL_NAME}}", ollama_service.model)
 
+
+@app.get("/models/manage", response_class=HTMLResponse)
+async def manage_models():
+    """Serve model management UI."""
+    with open("app/ui/templates/manage_models.html") as f:
+        return f.read().replace("{{MODEL_NAME}}", ollama_service.model)
+
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host=settings.api_host, port=settings.api_port)
