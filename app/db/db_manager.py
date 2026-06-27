@@ -11,12 +11,15 @@ sync_database_url = settings.database_url.replace("+asyncpg", "+psycopg2")
 engine = create_engine(sync_database_url, echo=settings.sqlalchemy_echo)
 SessionLocal = sessionmaker(bind=engine)
 
+
 def init_db():
     """Create tables"""
     Base.metadata.create_all(bind=engine)
 
+
 def get_db_session():
     return SessionLocal()
+
 
 # Async functions for worker loop
 async def get_pending_jobs_async(last_n):
@@ -31,6 +34,7 @@ async def get_pending_jobs_async(last_n):
         jobs = result.scalars().all()
         return jobs
 
+
 async def update_job_status_async(job_id, status, error=None):
     """Update the status of a background job (async)"""
     async with AsyncSessionLocal() as session:
@@ -44,6 +48,7 @@ async def update_job_status_async(job_id, status, error=None):
                 job.error = error
             await session.commit()
 
+
 async def get_prompt_async(background_job_id):
     """Fetch the chat prompt associated with a background job (async)"""
     async with AsyncSessionLocal() as session:
@@ -53,12 +58,13 @@ async def get_prompt_async(background_job_id):
         job = result.scalars().first()
         if not job:
             return None
-        
+
         result = await session.execute(
             select(ChatPrompt).where(ChatPrompt.id == job.prompt_id)
         )
         prompt = result.scalars().first()
         return prompt
+
 
 async def get_chat_async(background_job_id):
     """Fetch the chat thread associated with a background job (async)"""
@@ -82,6 +88,7 @@ async def get_chat_async(background_job_id):
         )
         chat = result.scalars().first()
         return chat
+
 
 def save_prompt(prompt):
     """Save a chat message to the database."""
@@ -107,6 +114,8 @@ def save_prompt(prompt):
     session.refresh(prompt)
     session.close()
     return prompt.id
+
+
 async def get_chat_messages(chat_id):
     """Fetch all messages for a given chat thread"""
 
@@ -117,6 +126,7 @@ async def get_chat_messages(chat_id):
             .order_by(ChatPrompt.created_at.asc(), ChatPrompt.id.asc())
         )
         return result.scalars().all()
+
 
 async def save_chat_message_async(chat_id, role, content, model=None):
     """Persist a chat message using the async DB session."""
@@ -157,7 +167,9 @@ async def update_chat_title_async(chat_id: int, title: str) -> None:
         return
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(ChatThread).where(ChatThread.id == chat_id))
+        result = await session.execute(
+            select(ChatThread).where(ChatThread.id == chat_id)
+        )
         chat = result.scalars().first()
         if not chat:
             return
@@ -174,15 +186,26 @@ def new_background_job(prompt_id):
     session.refresh(job)
     session.close()
     return job.id
+
+
 def get_pending_jobs(last_n):
     """Fetch pending jobs from the database"""
     session = get_db_session()
-    jobs = session.query(BackgroundJob).filter(BackgroundJob.status == "running").order_by(BackgroundJob.created_at.asc()).limit(last_n).all()
+    jobs = (
+        session.query(BackgroundJob)
+        .filter(BackgroundJob.status == "running")
+        .order_by(BackgroundJob.created_at.asc())
+        .limit(last_n)
+        .all()
+    )
     session.close()
     return jobs
+
+
 def update_job_status(job_id, status, error=None):
     """Update the status of a background job"""
     from app.db.models import BackgroundJob
+
     session = get_db_session()
     job = session.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
     if job:
@@ -191,16 +214,24 @@ def update_job_status(job_id, status, error=None):
             job.error = error
         session.commit()
     session.close()
+
+
 def get_job(job_id):
     """Fetch a background job by ID"""
     session = get_db_session()
     job = session.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
     session.close()
     return job
+
+
 def get_chat(background_job_id):
     """Fetch the chat thread associated with a background job"""
     session = get_db_session()
-    job = session.query(BackgroundJob).filter(BackgroundJob.id == background_job_id).first()
+    job = (
+        session.query(BackgroundJob)
+        .filter(BackgroundJob.id == background_job_id)
+        .first()
+    )
     if not job:
         session.close()
         return None
@@ -214,16 +245,23 @@ def get_chat(background_job_id):
     session.close()
     return chat
 
+
 def get_prompt(background_job_id):
     """Fetch the chat prompt associated with a background job"""
     session = get_db_session()
-    job = session.query(BackgroundJob).filter(BackgroundJob.id == background_job_id).first()
+    job = (
+        session.query(BackgroundJob)
+        .filter(BackgroundJob.id == background_job_id)
+        .first()
+    )
     if not job:
         session.close()
         return None
     prompt = session.query(ChatPrompt).filter(ChatPrompt.id == job.prompt_id).first()
     session.close()
     return prompt
+
+
 def get_chat(prompt_id):
     """Fetch the chat thread associated with a chat prompt"""
     session = get_db_session()
@@ -234,6 +272,7 @@ def get_chat(prompt_id):
     chat = session.query(ChatThread).filter(ChatThread.id == prompt.chat_id).first()
     session.close()
     return chat
+
 
 class DBError(Exception):
     pass
