@@ -195,6 +195,11 @@ async def pull_model_status():
 @router.get("/models")
 async def list_models():
     installed_models = await ollama_service.list_installed_models()
+    pull_status = worker_service.get_model_pull_status()
+    pulling_models: list[str] = []
+    pulling_model = pull_status.get("model")
+    if pull_status.get("running") and isinstance(pulling_model, str) and pulling_model:
+        pulling_models.append(pulling_model)
     selectable_models: list[str] = []
     for model in installed_models + STANDARD_MODELS + [ollama_service.model]:
         if model and model not in selectable_models:
@@ -203,12 +208,24 @@ async def list_models():
         "current_model": ollama_service.model,
         "installed_models": installed_models,
         "standard_models": STANDARD_MODELS,
+        "pulling_models": pulling_models,
         "models": selectable_models,
     }
 
 
 @router.post("/models/select")
 async def select_model(payload: ModelSelectRequestSchema):
+    pull_status = worker_service.get_model_pull_status()
+    pulling_model = pull_status.get("model")
+    if (
+        pull_status.get("running")
+        and isinstance(pulling_model, str)
+        and pulling_model == payload.model
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Model '{payload.model}' is currently being pulled and cannot be selected yet.",
+        )
     try:
         selected = ollama_service.set_model(payload.model)
     except ValueError as e:

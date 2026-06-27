@@ -59,13 +59,17 @@ async function loadModelOptions() {
         const currentModel = data.current_model;
         const installed = new Set(data.installed_models || []);
         const standard = new Set(data.standard_models || []);
+        const pulling = new Set(data.pulling_models || []);
 
         select.innerHTML = "";
         (data.models || []).forEach((model) => {
             const option = document.createElement("option");
             option.value = model;
 
-            if (installed.has(model)) {
+            if (pulling.has(model)) {
+                option.textContent = `${model} (pulling...)`;
+                option.disabled = true;
+            } else if (installed.has(model)) {
                 option.textContent = model;
             } else if (standard.has(model)) {
                 option.textContent = `${model} (download)`;
@@ -87,6 +91,17 @@ async function loadModelOptions() {
 
 async function selectModel(model, updateTitle = true) {
     if (!model) return;
+    const select = document.getElementById("model-select");
+    if (select) {
+        const option = Array.from(select.options).find((item) => item.value === model);
+        if (option && option.disabled) {
+            appendSystemMessage(
+                `Model "${model}" is currently being pulled and cannot be selected yet.`,
+                true
+            );
+            return;
+        }
+    }
     try {
         const resp = await fetch("/chat/models/select", {
             method: "POST",
