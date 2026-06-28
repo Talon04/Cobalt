@@ -84,7 +84,9 @@ class OllamaService:
                     stored = json.load(handle)
                 if isinstance(stored, dict):
                     return {
-                        "keep_alive": self._normalize_keep_alive(stored.get("keep_alive"))
+                        "keep_alive": self._normalize_keep_alive(
+                            stored.get("keep_alive")
+                        )
                     }
             except Exception as e:
                 logger.warning(
@@ -95,8 +97,12 @@ class OllamaService:
     def _save_runtime_settings(self) -> None:
         with self.model_config_lock:
             try:
-                self.runtime_settings_store_path.parent.mkdir(parents=True, exist_ok=True)
-                with self.runtime_settings_store_path.open("w", encoding="utf-8") as handle:
+                self.runtime_settings_store_path.parent.mkdir(
+                    parents=True, exist_ok=True
+                )
+                with self.runtime_settings_store_path.open(
+                    "w", encoding="utf-8"
+                ) as handle:
                     json.dump(self.runtime_settings, handle)
             except Exception as e:
                 logger.error(
