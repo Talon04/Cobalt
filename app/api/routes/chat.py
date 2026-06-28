@@ -9,10 +9,12 @@ from app.db.models.db import ChatThread
 from app.db.models.schemas import (
     ChatMessageSchema,
     ChatThreadCreateSchema,
+    ChatThreadUpdateSchema,
     ChatThreadSchema,
     ChatMessageOutSchema,
     ModelPullRequestSchema,
     ModelSelectRequestSchema,
+    OllamaSettingsSchema,
 )
 from app.services.llm import STANDARD_MODELS, ollama_service
 from app.services.db import get_db
@@ -44,6 +46,22 @@ async def create_chat(
         title=(payload.title if payload and payload.title else "New chat")
     )
     db.add(chat)
+    await db.commit()
+    await db.refresh(chat)
+    return chat
+
+
+@router.patch("/chats/{chat_id}", response_model=ChatThreadSchema)
+async def rename_chat(
+    chat_id: int, payload: ChatThreadUpdateSchema, db: AsyncSession = Depends(get_db)
+):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Chat title cannot be empty")
+    chat = await db.get(ChatThread, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    chat.title = " ".join(title.split())[:255]
     await db.commit()
     await db.refresh(chat)
     return chat
@@ -231,3 +249,13 @@ async def select_model(payload: ModelSelectRequestSchema):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True, "current_model": selected}
+
+
+@router.get("/settings")
+async def get_ollama_settings():
+    return ollama_service.get_runtime_settings()
+
+
+@router.post("/settings")
+async def update_ollama_settings(payload: OllamaSettingsSchema):
+    return ollama_service.update_runtime_settings(payload.keep_alive)

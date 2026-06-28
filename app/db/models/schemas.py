@@ -7,6 +7,10 @@ class ChatThreadCreateSchema(BaseModel):
     title: str | None = None
 
 
+class ChatThreadUpdateSchema(BaseModel):
+    title: str
+
+
 class ChatThreadSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,6 +49,10 @@ class ModelSelectRequestSchema(BaseModel):
 
 class ModelPullRequestSchema(BaseModel):
     model: str | None = None
+
+
+class OllamaSettingsSchema(BaseModel):
+    keep_alive: str | None = None
 
 
 class ScheduledTaskSchema(BaseModel):

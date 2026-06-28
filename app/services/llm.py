@@ -22,8 +22,12 @@ class OllamaService:
         self.model_store_path = self._resolve_model_store_path(
             settings.ollama_model_store_path
         )
+        self.runtime_settings_store_path = self._resolve_model_store_path(
+            settings.ollama_runtime_settings_store_path
+        )
         self.model_config_lock = Lock()
         self.model = self._load_model()
+        self.runtime_settings = self._load_runtime_settings()
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=300.0)
 
     def _resolve_model_store_path(self, configured_path: str) -> Path:
@@ -66,6 +70,53 @@ class OllamaService:
                     f"Could not persist model config to {self.model_store_path}: {e}"
                 )
 
+    def _normalize_keep_alive(self, value: str | None) -> str:
+        cleaned = (value or "").strip()
+        return cleaned or settings.ollama_keep_alive
+
+    def _load_runtime_settings(self) -> dict:
+        default_settings = {"keep_alive": settings.ollama_keep_alive}
+        with self.model_config_lock:
+            if not self.runtime_settings_store_path.exists():
+                return default_settings
+            try:
+                with self.runtime_settings_store_path.open(encoding="utf-8") as handle:
+                    stored = json.load(handle)
+                if isinstance(stored, dict):
+                    return {
+                        "keep_alive": self._normalize_keep_alive(
+                            stored.get("keep_alive")
+                        )
+                    }
+            except Exception as e:
+                logger.warning(
+                    f"Could not load runtime config from {self.runtime_settings_store_path}: {e}"
+                )
+        return default_settings
+
+    def _save_runtime_settings(self) -> None:
+        with self.model_config_lock:
+            try:
+                self.runtime_settings_store_path.parent.mkdir(
+                    parents=True, exist_ok=True
+                )
+                with self.runtime_settings_store_path.open(
+                    "w", encoding="utf-8"
+                ) as handle:
+                    json.dump(self.runtime_settings, handle)
+            except Exception as e:
+                logger.error(
+                    f"Could not persist runtime config to {self.runtime_settings_store_path}: {e}"
+                )
+
+    def get_runtime_settings(self) -> dict:
+        return dict(self.runtime_settings)
+
+    def update_runtime_settings(self, keep_alive: str | None = None) -> dict:
+        self.runtime_settings["keep_alive"] = self._normalize_keep_alive(keep_alive)
+        self._save_runtime_settings()
+        return self.get_runtime_settings()
+
     def set_model(self, model: str) -> str:
         selected = model.strip()
         if not selected:
@@ -96,7 +147,12 @@ class OllamaService:
         try:
             resp = await self.client.post(
                 "/api/chat",
-                json={"model": self.model, "messages": messages, "stream": stream},
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": stream,
+                    "keep_alive": self.runtime_settings["keep_alive"],
+                },
             )
             return resp
         except Exception as e:
@@ -112,6 +168,7 @@ class OllamaService:
                     "messages": messages,
                     "stream": False,
                     "think": False,
+                    "keep_alive": self.runtime_settings["keep_alive"],
                     "options": {"temperature": 0.1, "top_p": 0.2, "num_predict": 16},
                 },
             )
@@ -137,6 +194,7 @@ class OllamaService:
                     "messages": messages,
                     "stream": True,
                     "think": False,
+                    "keep_alive": self.runtime_settings["keep_alive"],
                 },
             ) as response:
                 response.raise_for_status()

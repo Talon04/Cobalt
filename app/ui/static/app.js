@@ -1,17 +1,38 @@
 let currentChatId = null;
 
-function appendSystemMessage(message, isError = false) {
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function formatMessageContent(content) {
+    let formatted = escapeHtml(content || "");
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    formatted = formatted.replace(/\n/g, "<br>");
+    return formatted;
+}
+
+function appendChatMessage(senderLabel, content, model = null, isError = false) {
     const chat = document.getElementById("chat");
-    if (!chat) return;
+    if (!chat) return null;
     const row = document.createElement("p");
     if (isError) {
         row.style.color = "red";
     }
     const strong = document.createElement("strong");
-    strong.textContent = "Cobalt:";
+    strong.textContent = model ? `${senderLabel} - ${model}:` : `${senderLabel}:`;
     row.appendChild(strong);
-    row.appendChild(document.createTextNode(` ${message}`));
+    const messageSpan = document.createElement("span");
+    messageSpan.innerHTML = ` ${formatMessageContent(content)}`;
+    row.appendChild(messageSpan);
     chat.appendChild(row);
+    return messageSpan;
+}
+
+function appendSystemMessage(message, isError = false) {
+    appendChatMessage("Cobalt", message, null, isError);
 }
 
 function ensureModelOption(model) {
@@ -137,10 +158,15 @@ async function loadChats(selectChatId = null) {
         return;
     }
 
+    const newChatOption = document.createElement("option");
+    newChatOption.value = "__new__";
+    newChatOption.textContent = "✨ Start new chat";
+    select.appendChild(newChatOption);
+
     chats.forEach((chat) => {
         const option = document.createElement("option");
         option.value = chat.id;
-        option.textContent = chat.title;
+        option.textContent = `💬 ${chat.title}`;
         if (selectChatId && chat.id === selectChatId) {
             option.selected = true;
         }
@@ -163,15 +189,23 @@ async function loadChatMessages(chatId) {
 
     messages.forEach((message) => {
         if (message.role === "user") {
-            chat.innerHTML += `<p><strong>You:</strong> ${message.content}</p>`;
+            appendChatMessage("You", message.content);
         } else {
-            chat.innerHTML += `<p><strong>Cobalt - ${message.model || "Unknown Model"}: </strong> ${message.content}</p>`;
+            appendChatMessage(
+                "Cobalt",
+                message.content,
+                message.model || "Unknown Model"
+            );
         }
     });
 }
 
 async function switchChat(chatId) {
     if (!chatId) return;
+    if (chatId === "__new__") {
+        await createNewChat();
+        return;
+    }
     currentChatId = Number(chatId);
     await loadChatMessages(currentChatId);
 }
@@ -188,8 +222,9 @@ async function createNewChat(selectAfterCreate = true) {
 function setSendingEnabled(enabled) {
     const sendButton = document.getElementById("send-button");
     const input = document.getElementById("input");
-    const newChatButton = document.getElementById("new-chat-button");
+    const renameButton = document.getElementById("rename-chat-button");
     const modelSelect = document.getElementById("model-select");
+    const chatSelect = document.getElementById("chat-select");
 
     if (sendButton) {
         sendButton.disabled = !enabled;
@@ -197,17 +232,19 @@ function setSendingEnabled(enabled) {
     if (input) {
         input.disabled = !enabled;
     }
-    if (newChatButton) {
-        newChatButton.disabled = !enabled;
+    if (renameButton) {
+        renameButton.disabled = !enabled;
     }
     if (modelSelect) {
         modelSelect.disabled = !enabled;
+    }
+    if (chatSelect) {
+        chatSelect.disabled = !enabled;
     }
 }
 
 async function sendMessage() {
     const input = document.getElementById("input");
-    const chat = document.getElementById("chat");
 
     const msg = input.value;
     if (!msg) return;
@@ -216,7 +253,7 @@ async function sendMessage() {
         return;
     }
 
-    chat.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
+    appendChatMessage("You", msg);
     input.value = "";
     setSendingEnabled(false);
 
@@ -230,17 +267,18 @@ async function sendMessage() {
         if (!resp.ok) {
             const err = await resp.text();
 
-            chat.innerHTML += `<p style="color:red">Network error: ${err}</p>`;
+            appendSystemMessage(`Network error: ${err}`, true);
             console.error("Send message failed:", err);
             setSendingEnabled(true);
 
             return;
         }
 
-        const assistantElem = document.createElement("p");
-        assistantElem.innerHTML = `<strong>Cobalt: </strong> <span class="streaming"></span>`;
-        chat.appendChild(assistantElem);
-        const streamSpan = assistantElem.querySelector(".streaming");
+        const streamSpan = appendChatMessage("Cobalt", "");
+        if (!streamSpan) {
+            throw new Error("Chat container not found");
+        }
+        let streamedText = "";
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -282,14 +320,15 @@ async function sendMessage() {
 
                             if (payload.error) {
                                 const err = payload.error;
-                                chat.innerHTML += `<p style="color:red"><strong>Error:</strong> ${err}</p>`;
+                                appendSystemMessage(`Error: ${err}`, true);
                                 setSendingEnabled(true);
                                 streamEnded = true;
                                 break;
                             }
 
                             if (payload.content) {
-                                streamSpan.textContent += payload.content;
+                                streamedText += payload.content;
+                                streamSpan.innerHTML = ` ${formatMessageContent(streamedText)}`;
                             }
                         } catch {
                             // ignore malformed chunks
@@ -304,8 +343,38 @@ async function sendMessage() {
         await loadChats(currentChatId);
         setSendingEnabled(true);
     } catch (e) {
-        chat.innerHTML += `<p style="color:red">Error: ${e}</p>`;
+        appendSystemMessage(`Error: ${e}`, true);
         setSendingEnabled(true);
+    }
+}
+
+async function renameCurrentChat() {
+    if (!currentChatId) return;
+    const currentOption = document.querySelector(
+        `#chat-select option[value="${currentChatId}"]`
+    );
+    const currentTitle = currentOption
+        ? currentOption.textContent.replace(/^💬\s*/, "")
+        : "Chat";
+    const nextTitle = prompt("Rename chat:", currentTitle);
+    if (nextTitle === null) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed) {
+        appendSystemMessage("Chat title cannot be empty", true);
+        return;
+    }
+    try {
+        const resp = await fetch(`/chat/chats/${currentChatId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: trimmed }),
+        });
+        if (!resp.ok) {
+            throw new Error(await readErrorMessage(resp, "Unable to rename chat"));
+        }
+        await loadChats(currentChatId);
+    } catch (error) {
+        appendSystemMessage(`Failed to rename chat: ${error}`, true);
     }
 }
 

@@ -2,6 +2,7 @@ import asyncio
 
 from app.core.builder import build_first_message_summary_prompt, build_full_prompt
 from app.db.db_manager import (
+    claim_job_async,
     get_pending_jobs_async,
     update_job_status_async,
     get_prompt_async,
@@ -132,6 +133,11 @@ def _normalize_summary_title(raw_title: str) -> str:
 
 async def run_chat_job(job_id):
     try:
+        claimed = await claim_job_async(job_id)
+        if not claimed:
+            logger.info("Skipping job %s because it is no longer queued", job_id)
+            return
+
         logger.info(f"Starting job {job_id}")
 
         prompt = await get_prompt_async(job_id)
