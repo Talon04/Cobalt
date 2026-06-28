@@ -16,6 +16,32 @@ function setPullStatus(message, visible = true) {
     status.classList.toggle("hidden", !visible);
 }
 
+function formatBytes(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "unknown";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let size = value;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+    }
+    const precision = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+    return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatPullProgress(status) {
+    const model = status?.model || "model";
+    const percent = typeof status?.percent === "number"
+        ? `${status.percent.toFixed(2)}%`
+        : "--%";
+    const downloaded = formatBytes(status?.downloaded_bytes);
+    const total = formatBytes(status?.total_bytes);
+    const speed = typeof status?.speed_bytes_per_sec === "number"
+        ? `${formatBytes(status.speed_bytes_per_sec)}/s`
+        : "unknown";
+    return `Pulling ${model}: ${percent} | ${downloaded} / ${total} | ${speed}`;
+}
+
 function setButtonsEnabled(enabled) {
     const modelSelect = document.getElementById("model-select");
     const pullSelected = document.getElementById("pull-selected-model-button");
@@ -151,7 +177,7 @@ async function waitForPullToFinish() {
             }
             return;
         }
-        setPullStatus(`Pulling ${data.model}... still working.`);
+        setPullStatus(formatPullProgress(data));
         await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 }

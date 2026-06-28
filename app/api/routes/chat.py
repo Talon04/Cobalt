@@ -119,7 +119,7 @@ async def send_message_stream(
             "chat_id": msg.chat_id,
             "role": msg.role,
             "content": msg.content,
-            "model": None,
+            "model": msg.model or ollama_service.model,
         }
     )
 

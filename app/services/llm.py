@@ -1,4 +1,5 @@
 import json
+import inspect
 from pathlib import Path
 import re
 from threading import Lock
@@ -142,13 +143,16 @@ class OllamaService:
             logger.warning(f"Could not fetch installed models from Ollama: {e}")
             return []
 
-    async def chat(self, messages: list[dict], stream: bool = False):
+    async def chat(
+        self, messages: list[dict], stream: bool = False, model: str | None = None
+    ):
         """Send message to Ollama"""
+        target_model = (model or self.model).strip()
         try:
             resp = await self.client.post(
                 "/api/chat",
                 json={
-                    "model": self.model,
+                    "model": target_model,
                     "messages": messages,
                     "stream": stream,
                     "keep_alive": self.runtime_settings["keep_alive"],
@@ -156,15 +160,18 @@ class OllamaService:
             )
             return resp
         except Exception as e:
-            logger.error(f"Ollama error: {e} for: {self.model}")
+            logger.error(f"Ollama error: {e} for: {target_model}")
             raise
 
-    async def summarize_first_message(self, messages: list[dict]) -> str:
+    async def summarize_first_message(
+        self, messages: list[dict], model: str | None = None
+    ) -> str:
+        target_model = (model or self.model).strip()
         try:
             resp = await self.client.post(
                 "/api/chat",
                 json={
-                    "model": self.model,
+                    "model": target_model,
                     "messages": messages,
                     "stream": False,
                     "think": False,
@@ -181,16 +188,17 @@ class OllamaService:
                     return content.strip()
             return ""
         except Exception as e:
-            logger.error(f"Ollama summary error: {e} for: {self.model}")
+            logger.error(f"Ollama summary error: {e} for: {target_model}")
             raise
 
-    async def stream_chat(self, messages: list[dict]):
+    async def stream_chat(self, messages: list[dict], model: str | None = None):
+        target_model = (model or self.model).strip()
         try:
             async with self.client.stream(
                 "POST",
                 "/api/chat",
                 json={
-                    "model": self.model,
+                    "model": target_model,
                     "messages": messages,
                     "stream": True,
                     "think": False,
@@ -212,16 +220,20 @@ class OllamaService:
             logger.error(
                 "Ollama returned %s for model %s",
                 e.response.status_code,
-                self.model,
+                target_model,
             )
 
-            raise ModelNotFoundError(self.model) if e.response.status_code == 404 else e
+            raise (
+                ModelNotFoundError(target_model)
+                if e.response.status_code == 404
+                else e
+            )
 
         except Exception:
             logger.exception("Ollama streaming request failed")
             raise
 
-    async def pull_model(self, model_name: str | None = None) -> str:
+    async def pull_model(self, model_name: str | None = None, progress_callback=None) -> str:
         """Pull a model into Ollama and return the model name when done."""
         target_model = model_name or self.model
         try:
@@ -234,8 +246,18 @@ class OllamaService:
                     json={"name": target_model, "stream": True},
                 ) as response:
                     response.raise_for_status()
-                    async for _ in response.aiter_lines():
-                        pass
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            event = json.loads(line)
+                        except Exception:
+                            event = {"status": line}
+
+                        if progress_callback:
+                            maybe_awaitable = progress_callback(event)
+                            if inspect.isawaitable(maybe_awaitable):
+                                await maybe_awaitable
         except Exception as e:
             logger.error(f"Ollama pull error: {e}")
             raise

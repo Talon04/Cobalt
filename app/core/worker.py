@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from app.core.builder import build_first_message_summary_prompt, build_full_prompt
 from app.db.db_manager import (
@@ -23,6 +24,11 @@ model_pull_status: dict = {
     "model": None,
     "error": None,
     "done": False,
+    "status": None,
+    "percent": None,
+    "downloaded_bytes": None,
+    "total_bytes": None,
+    "speed_bytes_per_sec": None,
 }
 
 
@@ -56,14 +62,64 @@ async def run_model_pull_job(model_name: str) -> None:
         "model": model_name,
         "error": None,
         "done": False,
+        "status": "starting",
+        "percent": 0,
+        "downloaded_bytes": 0,
+        "total_bytes": None,
+        "speed_bytes_per_sec": None,
     }
+    last_completed = 0
+    last_update_ts = time.monotonic()
+
+    async def _on_pull_progress(event: dict) -> None:
+        global model_pull_status
+        nonlocal last_completed, last_update_ts
+
+        status_text = event.get("status") if isinstance(event, dict) else None
+        total_raw = event.get("total") if isinstance(event, dict) else None
+        completed_raw = event.get("completed") if isinstance(event, dict) else None
+
+        total = total_raw if isinstance(total_raw, int) else None
+        completed = completed_raw if isinstance(completed_raw, int) else None
+
+        percent = None
+        if isinstance(total, int) and total > 0 and isinstance(completed, int):
+            percent = max(0, min(100, round((completed / total) * 100, 2)))
+
+        speed = None
+        now_ts = time.monotonic()
+        if isinstance(completed, int):
+            delta_bytes = completed - last_completed
+            delta_time = now_ts - last_update_ts
+            if delta_bytes >= 0 and delta_time > 0:
+                speed = delta_bytes / delta_time
+            last_completed = completed
+            last_update_ts = now_ts
+
+        model_pull_status = {
+            "running": True,
+            "model": model_name,
+            "error": None,
+            "done": False,
+            "status": status_text,
+            "percent": percent,
+            "downloaded_bytes": completed,
+            "total_bytes": total,
+            "speed_bytes_per_sec": speed,
+        }
+
     try:
-        await ollama_service.pull_model(model_name)
+        await ollama_service.pull_model(model_name, progress_callback=_on_pull_progress)
         model_pull_status = {
             "running": False,
             "model": model_name,
             "error": None,
             "done": True,
+            "status": "ready",
+            "percent": 100,
+            "downloaded_bytes": model_pull_status.get("downloaded_bytes"),
+            "total_bytes": model_pull_status.get("total_bytes"),
+            "speed_bytes_per_sec": 0,
         }
     except Exception:
         logger.exception("Error pulling model %s", model_name)
@@ -72,6 +128,11 @@ async def run_model_pull_job(model_name: str) -> None:
             "model": model_name,
             "error": "Model pull failed. Check server logs for details.",
             "done": False,
+            "status": "failed",
+            "percent": model_pull_status.get("percent"),
+            "downloaded_bytes": model_pull_status.get("downloaded_bytes"),
+            "total_bytes": model_pull_status.get("total_bytes"),
+            "speed_bytes_per_sec": 0,
         }
 
 
@@ -88,6 +149,11 @@ def start_model_pull(model_name: str) -> dict:
         "model": model_name,
         "error": None,
         "done": False,
+        "status": None,
+        "percent": None,
+        "downloaded_bytes": None,
+        "total_bytes": None,
+        "speed_bytes_per_sec": None,
     }
     model_pull_task = asyncio.create_task(run_model_pull_job(model_name))
     return {"started": True, "model": model_name, "status": "running"}
@@ -166,13 +232,14 @@ async def run_chat_job(job_id):
             and bool(prompt.content)
             and await is_first_user_prompt_async(chat.id, prompt.id)
         )
+        selected_model = (prompt.model or ollama_service.model).strip()
         accumulated = ""
         response_model = None
         sent_model = False
         chunk_count = 0
 
         logger.info(f"Starting streaming for job {job_id}")
-        async for chunk in ollama_service.stream_chat(full_prompt):
+        async for chunk in ollama_service.stream_chat(full_prompt, model=selected_model):
             chunk_count += 1
             content = extract(chunk)
             if isinstance(chunk, dict):
@@ -196,7 +263,9 @@ async def run_chat_job(job_id):
         if should_summarize_title:
             try:
                 summary_prompt = build_first_message_summary_prompt(prompt.content)
-                summary = await ollama_service.summarize_first_message(summary_prompt)
+                summary = await ollama_service.summarize_first_message(
+                    summary_prompt, model=selected_model
+                )
                 summary_title = _normalize_summary_title(summary)
                 if summary_title:
                     await update_chat_title_async(chat.id, summary_title)

@@ -79,24 +79,23 @@ async function loadModelOptions() {
         const data = await resp.json();
         const currentModel = data.current_model;
         const installed = new Set(data.installed_models || []);
-        const standard = new Set(data.standard_models || []);
-        const pulling = new Set(data.pulling_models || []);
+
+        // Chat selector should only show ready-to-use models.
+        const chatModels = [];
+        (data.installed_models || []).forEach((model) => {
+            if (model && !chatModels.includes(model)) {
+                chatModels.push(model);
+            }
+        });
+        if (currentModel && !chatModels.includes(currentModel)) {
+            chatModels.push(currentModel);
+        }
 
         select.innerHTML = "";
-        (data.models || []).forEach((model) => {
+        chatModels.forEach((model) => {
             const option = document.createElement("option");
             option.value = model;
-
-            if (pulling.has(model)) {
-                option.textContent = `${model} (pulling...)`;
-                option.disabled = true;
-            } else if (installed.has(model)) {
-                option.textContent = model;
-            } else if (standard.has(model)) {
-                option.textContent = `${model} (download)`;
-            } else {
-                option.textContent = `${model} (custom)`;
-            }
+            option.textContent = installed.has(model) ? model : `${model} (current)`;
 
             if (model === currentModel) {
                 option.selected = true;
@@ -245,6 +244,7 @@ function setSendingEnabled(enabled) {
 
 async function sendMessage() {
     const input = document.getElementById("input");
+    const modelSelect = document.getElementById("model-select");
 
     const msg = input.value;
     if (!msg) return;
@@ -261,7 +261,12 @@ async function sendMessage() {
         const resp = await fetch("/chat/send-stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: currentChatId, role: "user", content: msg, model: null }),
+            body: JSON.stringify({
+                chat_id: currentChatId,
+                role: "user",
+                content: msg,
+                model: modelSelect ? modelSelect.value : null,
+            }),
         });
 
         if (!resp.ok) {

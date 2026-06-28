@@ -34,6 +34,7 @@ class ChatMessageSchema(BaseModel):
     chat_id: int
     role: str
     content: str
+    model: str | None = None
 
 
 class ChatResponseSchema(BaseModel):
