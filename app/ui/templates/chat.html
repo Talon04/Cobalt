@@ -9,10 +9,11 @@
         <h1 id="app-title">Cobalt - {{MODEL_NAME}}</h1>
         <div class="nav-links">
             <a href="/models/manage">Manage models</a>
+            <a href="/settings">Settings</a>
         </div>
         <div class="chat-bar">
             <select id="chat-select" onchange="switchChat(this.value)"></select>
-            <button id="new-chat-button" onclick="createNewChat()">New chat</button>
+            <button id="rename-chat-button" onclick="renameCurrentChat()">Rename chat</button>
         </div>
         <div class="model-bar">
             <select id="model-select" onchange="selectModel(this.value)"></select>

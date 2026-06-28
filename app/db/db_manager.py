@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 from app.db.models.db import Base, ChatPrompt, BackgroundJob, ChatThread
@@ -27,7 +27,7 @@ async def get_pending_jobs_async(last_n):
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(BackgroundJob)
-            .where(BackgroundJob.status == "running")
+            .where(BackgroundJob.status == "queued")
             .order_by(BackgroundJob.created_at.asc())
             .limit(last_n)
         )
@@ -47,6 +47,18 @@ async def update_job_status_async(job_id, status, error=None):
             if error:
                 job.error = error
             await session.commit()
+
+
+async def claim_job_async(job_id: int) -> bool:
+    """Claim a queued job for processing, returning True on success."""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            update(BackgroundJob)
+            .where(BackgroundJob.id == job_id, BackgroundJob.status == "queued")
+            .values(status="running")
+        )
+        await session.commit()
+        return result.rowcount == 1
 
 
 async def get_prompt_async(background_job_id):
@@ -180,7 +192,7 @@ async def update_chat_title_async(chat_id: int, title: str) -> None:
 def new_background_job(prompt_id):
     """Create a new background job entry in the database"""
     session = get_db_session()
-    job = BackgroundJob(prompt_id=prompt_id, status="running")
+    job = BackgroundJob(prompt_id=prompt_id, status="queued")
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -193,7 +205,7 @@ def get_pending_jobs(last_n):
     session = get_db_session()
     jobs = (
         session.query(BackgroundJob)
-        .filter(BackgroundJob.status == "running")
+        .filter(BackgroundJob.status == "queued")
         .order_by(BackgroundJob.created_at.asc())
         .limit(last_n)
         .all()

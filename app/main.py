@@ -33,6 +33,12 @@ async def manage_models():
         return f.read().replace("{{MODEL_NAME}}", ollama_service.model)
 
 
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page():
+    with open("app/ui/templates/settings.html") as f:
+        return f.read()
+
+
 if __name__ == "__main__":
     import uvicorn
 

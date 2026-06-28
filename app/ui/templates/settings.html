@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cobalt Settings</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Cobalt Settings</h1>
+        <div class="nav-links">
+            <a href="/">Back to chat</a>
+            <a href="/models/manage">Manage models</a>
+        </div>
+        <label for="keep-alive-input">Ollama keep_alive</label>
+        <input id="keep-alive-input" type="text" placeholder="e.g. 5m or 0">
+        <button onclick="saveSettings()">Save</button>
+        <p id="settings-status" class="status"></p>
+    </div>
+    <script src="/static/settings.js"></script>
+</body>
+</html>
