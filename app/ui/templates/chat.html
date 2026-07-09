@@ -2,6 +2,11 @@
 <html>
 <head>
     <title>Cobalt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -19,8 +24,10 @@
             <select id="model-select" onchange="selectModel(this.value)"></select>
         </div>
         <div id="chat"></div>
-        <input type="text" id="input" placeholder="Ask me anything...">
-        <button id="send-button" onclick="sendMessage()">Send</button>
+        <div class="input-row">
+            <input type="text" id="input" placeholder="Ask me anything..." autocomplete="off">
+            <button id="send-button" onclick="sendMessage()">Send</button>
+        </div>
     </div>
     <script src="/static/app.js"></script>
 </body>

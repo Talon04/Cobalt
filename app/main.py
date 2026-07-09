@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
 from app.api.router import router
 from app.core.lifespan import lifespan
 from app.core.logging import logger
@@ -24,6 +25,16 @@ async def index():
     """Serve UI"""
     with open("app/ui/templates/chat.html") as f:
         return f.read().replace("{{MODEL_NAME}}", ollama_service.model)
+
+
+@app.get("/manifest.webmanifest")
+async def web_manifest():
+    return FileResponse("app/ui/static/manifest.webmanifest")
+
+
+@app.get("/service-worker.js")
+async def service_worker():
+    return FileResponse("app/ui/static/service-worker.js")
 
 
 @app.get("/models/manage", response_class=HTMLResponse)

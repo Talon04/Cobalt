@@ -35,6 +35,7 @@ body {
     height: 400px;
     overflow-y: auto;
     margin-bottom: 10px;
+    border-radius: 8px;
 }
 
 .chat-message {
@@ -120,6 +121,15 @@ input {
     font-size: 1rem;
 }
 
+.input-row {
+    display: flex;
+    gap: 10px;
+}
+
+#input {
+    flex: 1;
+}
+
 #custom-model-input {
     min-width: 260px;
 }
@@ -132,6 +142,31 @@ button {
 select {
     padding: 10px;
     min-width: 220px;
+}
+
+@media (max-width: 700px) {
+    body {
+        padding: 12px;
+    }
+
+    .nav-links,
+    .chat-bar,
+    .model-bar,
+    .input-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #chat {
+        height: 55vh;
+    }
+
+    select,
+    button,
+    input {
+        width: 100%;
+        box-sizing: border-box;
+    }
 }
 
 #messages {
