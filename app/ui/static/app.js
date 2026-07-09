@@ -1,6 +1,19 @@
 let currentChatId = null;
 const pendingMathTypeset = new WeakMap();
 
+const SIMPLE_MATH_SYMBOLS = new Map([
+    ["\\rightarrow", "→"],
+    ["\\leftarrow", "←"],
+    ["\\leftrightarrow", "↔"],
+    ["\\uparrow", "↑"],
+    ["\\downarrow", "↓"],
+    ["\\pm", "±"],
+    ["\\times", "×"],
+    ["\\div", "÷"],
+    ["\\leq", "≤"],
+    ["\\geq", "≥"],
+]);
+
 function escapeHtml(text) {
     return String(text)
         .replace(/&/g, "&amp;")
@@ -33,19 +46,27 @@ function formatMessageContent(content) {
     const normalized = String(content || "").replace(/\r\n/g, "\n").trim();
     if (!normalized) return "";
 
+    const expanded = normalized.replace(/\$([^$\n]+)\$/g, (match, mathContent) => {
+        const symbol = SIMPLE_MATH_SYMBOLS.get(mathContent.trim());
+        return symbol || match;
+    });
+
     const renderMarkdown = getMarkdownRenderer();
     if (!renderMarkdown) {
-        return `<p>${escapeHtml(normalized).replace(/\n/g, "<br>")}</p>`;
+        return `<p>${escapeHtml(expanded).replace(/\n/g, "<br>")}</p>`;
     }
 
-    return renderMarkdown(normalized);
+    return renderMarkdown(expanded);
 }
 
 function typesetMathInElement(element) {
     if (!element || !window.MathJax?.typesetPromise) return;
-    window.MathJax.typesetClear([element]);
-    window.MathJax
-        .typesetPromise([element])
+    const ready = window.MathJax.startup?.promise ?? Promise.resolve();
+    ready
+        .then(() => {
+            window.MathJax.typesetClear([element]);
+            return window.MathJax.typesetPromise([element]);
+        })
         .catch((error) => console.error("Math typeset failed:", error));
 }
 
