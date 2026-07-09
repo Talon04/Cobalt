@@ -1,4 +1,5 @@
 let currentChatId = null;
+const pendingMathTypeset = new WeakMap();
 
 function escapeHtml(text) {
     return String(text)
@@ -40,6 +41,27 @@ function formatMessageContent(content) {
     return renderMarkdown(normalized);
 }
 
+function typesetMathInElement(element) {
+    if (!element || !window.MathJax?.typesetPromise) return;
+    window.MathJax.typesetClear([element]);
+    window.MathJax
+        .typesetPromise([element])
+        .catch((error) => console.error("Math typeset failed:", error));
+}
+
+function scheduleMathTypeset(element) {
+    if (!element || !window.MathJax?.typesetPromise) return;
+    const existingTimer = pendingMathTypeset.get(element);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+    const timer = setTimeout(() => {
+        pendingMathTypeset.delete(element);
+        typesetMathInElement(element);
+    }, 80);
+    pendingMathTypeset.set(element, timer);
+}
+
 function appendChatMessage(senderLabel, content, model = null, isError = false) {
     const chat = document.getElementById("chat");
     if (!chat) return null;
@@ -54,6 +76,7 @@ function appendChatMessage(senderLabel, content, model = null, isError = false) 
     const messageSpan = document.createElement("span");
     messageSpan.className = "chat-message-content";
     messageSpan.innerHTML = formatMessageContent(content);
+    scheduleMathTypeset(messageSpan);
     row.appendChild(messageSpan);
     chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
@@ -381,6 +404,7 @@ async function sendMessage() {
                             if (payload.content) {
                                 streamedText += payload.content;
                                 streamSpan.innerHTML = formatMessageContent(streamedText);
+                                scheduleMathTypeset(streamSpan);
                             }
                         } catch {
                             // ignore malformed chunks

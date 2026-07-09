@@ -31,6 +31,18 @@
     </div>
     <script src="/static/vendor/marked.min.js"></script>
     <script src="/static/vendor/purify.min.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [["$", "$"], ["\\(", "\\)"]],
+                displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+            },
+            startup: {
+                typeset: false,
+            },
+        };
+    </script>
+    <script src="/static/vendor/mathjax-tex-svg.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
