@@ -1,5 +1,5 @@
 let currentChatId = null;
-const pendingMathTypeset = new WeakMap();
+const pendingMathRender = new WeakMap();
 
 const SIMPLE_MATH_SYMBOLS = new Map([
     ["\\rightarrow", "→"],
@@ -59,28 +59,36 @@ function formatMessageContent(content) {
     return renderMarkdown(expanded);
 }
 
-function typesetMathInElement(element) {
-    if (!element || !window.MathJax?.typesetPromise) return;
-    const ready = window.MathJax.startup?.promise ?? Promise.resolve();
-    ready
-        .then(() => {
-            window.MathJax.typesetClear([element]);
-            return window.MathJax.typesetPromise([element]);
-        })
-        .catch((error) => console.error("Math typeset failed:", error));
+function renderMathInElement(element) {
+    if (!element || typeof window.renderMathInElement !== "function") return;
+    try {
+        window.renderMathInElement(element, {
+            delimiters: [
+                { left: "$$", right: "$$", display: true },
+                { left: "$", right: "$", display: false },
+                { left: "\\(", right: "\\)", display: false },
+                { left: "\\[", right: "\\]", display: true },
+            ],
+            throwOnError: false,
+            strict: "warn",
+            trust: false,
+        });
+    } catch (error) {
+        console.error("Math render failed:", error);
+    }
 }
 
-function scheduleMathTypeset(element) {
-    if (!element || !window.MathJax?.typesetPromise) return;
-    const existingTimer = pendingMathTypeset.get(element);
+function scheduleMathRender(element) {
+    if (!element || typeof window.renderMathInElement !== "function") return;
+    const existingTimer = pendingMathRender.get(element);
     if (existingTimer) {
         clearTimeout(existingTimer);
     }
     const timer = setTimeout(() => {
-        pendingMathTypeset.delete(element);
-        typesetMathInElement(element);
+        pendingMathRender.delete(element);
+        renderMathInElement(element);
     }, 80);
-    pendingMathTypeset.set(element, timer);
+    pendingMathRender.set(element, timer);
 }
 
 function appendChatMessage(senderLabel, content, model = null, isError = false) {
@@ -97,7 +105,7 @@ function appendChatMessage(senderLabel, content, model = null, isError = false) 
     const messageSpan = document.createElement("span");
     messageSpan.className = "chat-message-content";
     messageSpan.innerHTML = formatMessageContent(content);
-    scheduleMathTypeset(messageSpan);
+    scheduleMathRender(messageSpan);
     row.appendChild(messageSpan);
     chat.appendChild(row);
     chat.scrollTop = chat.scrollHeight;
@@ -322,6 +330,27 @@ function registerServiceWorker() {
     });
 }
 
+function setupPWAInstallPrompt() {
+    let deferredPrompt = null;
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+        event.preventDefault();
+        deferredPrompt = event;
+        console.log("PWA install prompt available (Android Chrome/Vivaldi/Edge)");
+    });
+
+    window.addEventListener("appinstalled", () => {
+        console.log("PWA app installed successfully");
+        deferredPrompt = null;
+    });
+
+    window.addEventListener("orientationchange", () => {
+        // Reset on orientation change
+    });
+
+    return deferredPrompt;
+}
+
 function setupInputSendShortcut() {
     const input = document.getElementById("input");
     if (!input) return;
@@ -425,7 +454,7 @@ async function sendMessage() {
                             if (payload.content) {
                                 streamedText += payload.content;
                                 streamSpan.innerHTML = formatMessageContent(streamedText);
-                                scheduleMathTypeset(streamSpan);
+                                scheduleMathRender(streamSpan);
                             }
                         } catch {
                             // ignore malformed chunks
@@ -477,6 +506,7 @@ async function renameCurrentChat() {
 
 window.addEventListener("DOMContentLoaded", async () => {
     registerServiceWorker();
+    setupPWAInstallPrompt();
     setupInputSendShortcut();
     await loadModelOptions();
     await loadChats();

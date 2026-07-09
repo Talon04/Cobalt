@@ -1,9 +1,18 @@
-const CACHE_NAME = "cobalt-static-v1";
+const CACHE_NAME = "cobalt-static-v2";
 const ASSETS = [
     "/",
     "/static/styles.css",
     "/static/app.js",
+    "/static/manage-models.js",
+    "/static/settings.js",
+    "/static/vendor/marked.min.js",
+    "/static/vendor/purify.min.js",
+    "/static/vendor/katex.min.css",
+    "/static/vendor/katex.min.js",
+    "/static/vendor/katex-auto-render.min.js",
     "/manifest.webmanifest",
+    "/static/icon-192.png",
+    "/static/icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {

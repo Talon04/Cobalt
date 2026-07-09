@@ -29,7 +29,12 @@ async def index():
 
 @app.get("/manifest.webmanifest")
 async def web_manifest():
-    return FileResponse("app/ui/static/manifest.webmanifest")
+    return FileResponse("app/ui/static/manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/browserconfig.xml")
+async def browserconfig():
+    return FileResponse("app/ui/static/browserconfig.xml", media_type="application/xml")
 
 
 @app.get("/service-worker.js")
