@@ -37,6 +37,56 @@ body {
     margin-bottom: 10px;
 }
 
+.chat-message {
+    margin: 0 0 12px;
+}
+
+.chat-message.error {
+    color: #b91c1c;
+}
+
+.chat-message-content {
+    display: block;
+    margin-top: 4px;
+}
+
+.chat-message-content p {
+    margin: 0 0 8px;
+}
+
+.chat-message-content h1,
+.chat-message-content h2,
+.chat-message-content h3,
+.chat-message-content h4,
+.chat-message-content h5,
+.chat-message-content h6 {
+    margin: 0 0 8px;
+}
+
+.chat-message-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 8px;
+}
+
+.chat-message-content th,
+.chat-message-content td {
+    border: 1px solid #d1d5db;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.chat-message-content thead {
+    background: #f9fafb;
+}
+
+.chat-message-content code {
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 1px 4px;
+}
+
 .status {
     padding: 8px 10px;
     border: 1px solid #d1d5db;
