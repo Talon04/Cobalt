@@ -7,84 +7,37 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;");
 }
 
-function renderInlineMarkdown(text) {
-    const codeTokens = [];
-    let rendered = escapeHtml(text || "");
-    rendered = rendered.replace(/`([^`]+)`/g, (_, code) => {
-        const token = `__CODE_TOKEN_${codeTokens.length}__`;
-        codeTokens.push(`<code>${code}</code>`);
-        return token;
-    });
-    rendered = rendered.replace(/\$\\rightarrow\$/g, "&rarr;");
-    rendered = rendered.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    rendered = rendered.replace(/\*(.+?)\*/g, "<em>$1</em>");
-    rendered = rendered.replace(/__CODE_TOKEN_(\d+)__/g, (_, index) => codeTokens[Number(index)]);
-    return rendered;
-}
+function getMarkdownRenderer() {
+    const markedLib = window.marked;
+    const purifier = window.DOMPurify;
+    if (!markedLib || !purifier) {
+        return null;
+    }
 
-function parseTableRow(row) {
-    return row
-        .trim()
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map((cell) => cell.trim());
-}
+    if (!getMarkdownRenderer.initialized) {
+        markedLib.setOptions({
+            gfm: true,
+            breaks: true,
+        });
+        getMarkdownRenderer.initialized = true;
+    }
 
-function isTableSeparatorRow(row) {
-    const trimmed = row.trim();
-    return /^\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(trimmed);
-}
-
-function isMarkdownTableBlock(lines) {
-    if (lines.length < 2) return false;
-    const [header, separator] = lines;
-    if (!header.includes("|")) return false;
-    return isTableSeparatorRow(separator);
-}
-
-function renderTable(lines) {
-    const [header, , ...body] = lines;
-    const headerCells = parseTableRow(header);
-    const bodyRows = body.filter((row) => row.trim()).map(parseTableRow);
-    const thead = `<thead><tr>${headerCells
-        .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
-        .join("")}</tr></thead>`;
-    const tbody = bodyRows.length
-        ? `<tbody>${bodyRows
-              .map(
-                  (cells) =>
-                      `<tr>${cells
-                          .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
-                          .join("")}</tr>`
-              )
-              .join("")}</tbody>`
-        : "";
-    return `<table>${thead}${tbody}</table>`;
+    return (content) =>
+        purifier.sanitize(markedLib.parse(content), {
+            USE_PROFILES: { html: true },
+        });
 }
 
 function formatMessageContent(content) {
     const normalized = String(content || "").replace(/\r\n/g, "\n").trim();
     if (!normalized) return "";
-    const blocks = normalized
-        .split(/\n\s*\n/)
-        .map((block) => block.trim())
-        .filter(Boolean);
-    return blocks
-        .map((block) => {
-            const headingMatch = block.match(/^(#{1,6})\s+(.+)$/);
-            if (headingMatch && !block.includes("\n")) {
-                const level = headingMatch[1].length;
-                const headingContent = renderInlineMarkdown(headingMatch[2]);
-                return `<h${level}>${headingContent}</h${level}>`;
-            }
-            const lines = block.split("\n");
-            if (isMarkdownTableBlock(lines)) {
-                return renderTable(lines);
-            }
-            return `<p>${lines.map((line) => renderInlineMarkdown(line)).join("<br>")}</p>`;
-        })
-        .join("");
+
+    const renderMarkdown = getMarkdownRenderer();
+    if (!renderMarkdown) {
+        return `<p>${escapeHtml(normalized).replace(/\n/g, "<br>")}</p>`;
+    }
+
+    return renderMarkdown(normalized);
 }
 
 function appendChatMessage(senderLabel, content, model = null, isError = false) {
@@ -318,6 +271,23 @@ function setSendingEnabled(enabled) {
     }
 }
 
+function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+        console.error("Service worker registration failed:", error);
+    });
+}
+
+function setupInputSendShortcut() {
+    const input = document.getElementById("input");
+    if (!input) return;
+    input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        sendMessage();
+    });
+}
+
 async function sendMessage() {
     const input = document.getElementById("input");
     const modelSelect = document.getElementById("model-select");
@@ -415,23 +385,6 @@ async function sendMessage() {
                         } catch {
                             // ignore malformed chunks
                         }
-                    }
-
-                    function registerServiceWorker() {
-                        if (!("serviceWorker" in navigator)) return;
-                        navigator.serviceWorker.register("/service-worker.js").catch((error) => {
-                            console.error("Service worker registration failed:", error);
-                        });
-                    }
-
-                    function setupInputSendShortcut() {
-                        const input = document.getElementById("input");
-                        if (!input) return;
-                        input.addEventListener("keydown", (event) => {
-                            if (event.key !== "Enter" || event.shiftKey) return;
-                            event.preventDefault();
-                            sendMessage();
-                        });
                     }
                 }
                 if (streamEnded) break;

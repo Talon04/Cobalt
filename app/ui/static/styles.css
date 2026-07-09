@@ -55,6 +55,20 @@ body {
     margin: 0 0 8px;
 }
 
+.chat-message-content ul,
+.chat-message-content ol {
+    margin: 0 0 8px;
+    padding-left: 20px;
+}
+
+.chat-message-content pre {
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 8px;
+    margin: 0 0 8px;
+    overflow-x: auto;
+}
+
 .chat-message-content h1,
 .chat-message-content h2,
 .chat-message-content h3,
