@@ -7,25 +7,100 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;");
 }
 
+function renderInlineMarkdown(text) {
+    const codeTokens = [];
+    let rendered = escapeHtml(text || "");
+    rendered = rendered.replace(/`([^`]+)`/g, (_, code) => {
+        const token = `__CODE_TOKEN_${codeTokens.length}__`;
+        codeTokens.push(`<code>${code}</code>`);
+        return token;
+    });
+    rendered = rendered.replace(/\$\\rightarrow\$/g, "&rarr;");
+    rendered = rendered.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    rendered = rendered.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    rendered = rendered.replace(/__CODE_TOKEN_(\d+)__/g, (_, index) => codeTokens[Number(index)]);
+    return rendered;
+}
+
+function parseTableRow(row) {
+    return row
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim());
+}
+
+function isTableSeparatorRow(row) {
+    const trimmed = row.trim();
+    return /^\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(trimmed);
+}
+
+function isMarkdownTableBlock(lines) {
+    if (lines.length < 2) return false;
+    const [header, separator] = lines;
+    if (!header.includes("|")) return false;
+    return isTableSeparatorRow(separator);
+}
+
+function renderTable(lines) {
+    const [header, , ...body] = lines;
+    const headerCells = parseTableRow(header);
+    const bodyRows = body.filter((row) => row.trim()).map(parseTableRow);
+    const thead = `<thead><tr>${headerCells
+        .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
+        .join("")}</tr></thead>`;
+    const tbody = bodyRows.length
+        ? `<tbody>${bodyRows
+              .map(
+                  (cells) =>
+                      `<tr>${cells
+                          .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
+                          .join("")}</tr>`
+              )
+              .join("")}</tbody>`
+        : "";
+    return `<table>${thead}${tbody}</table>`;
+}
+
 function formatMessageContent(content) {
-    let formatted = escapeHtml(content || "");
-    formatted = formatted.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    formatted = formatted.replace(/\n/g, "<br>");
-    return formatted;
+    const normalized = String(content || "").replace(/\r\n/g, "\n").trim();
+    if (!normalized) return "";
+    const blocks = normalized
+        .split(/\n\s*\n/)
+        .map((block) => block.trim())
+        .filter(Boolean);
+    return blocks
+        .map((block) => {
+            const headingMatch = block.match(/^(#{1,6})\s+(.+)$/);
+            if (headingMatch && !block.includes("\n")) {
+                const level = headingMatch[1].length;
+                const headingContent = renderInlineMarkdown(headingMatch[2]);
+                return `<h${level}>${headingContent}</h${level}>`;
+            }
+            const lines = block.split("\n");
+            if (isMarkdownTableBlock(lines)) {
+                return renderTable(lines);
+            }
+            return `<p>${lines.map((line) => renderInlineMarkdown(line)).join("<br>")}</p>`;
+        })
+        .join("");
 }
 
 function appendChatMessage(senderLabel, content, model = null, isError = false) {
     const chat = document.getElementById("chat");
     if (!chat) return null;
-    const row = document.createElement("p");
+    const row = document.createElement("div");
+    row.className = "chat-message";
     if (isError) {
-        row.style.color = "red";
+        row.classList.add("error");
     }
     const strong = document.createElement("strong");
     strong.textContent = model ? `${senderLabel} - ${model}:` : `${senderLabel}:`;
     row.appendChild(strong);
     const messageSpan = document.createElement("span");
-    messageSpan.innerHTML = ` ${formatMessageContent(content)}`;
+    messageSpan.className = "chat-message-content";
+    messageSpan.innerHTML = formatMessageContent(content);
     row.appendChild(messageSpan);
     chat.appendChild(row);
     return messageSpan;
@@ -333,7 +408,7 @@ async function sendMessage() {
 
                             if (payload.content) {
                                 streamedText += payload.content;
-                                streamSpan.innerHTML = ` ${formatMessageContent(streamedText)}`;
+                                streamSpan.innerHTML = formatMessageContent(streamedText);
                             }
                         } catch {
                             // ignore malformed chunks
