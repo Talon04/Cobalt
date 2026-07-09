@@ -103,6 +103,7 @@ function appendChatMessage(senderLabel, content, model = null, isError = false) 
     messageSpan.innerHTML = formatMessageContent(content);
     row.appendChild(messageSpan);
     chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
     return messageSpan;
 }
 
@@ -321,8 +322,9 @@ async function sendMessage() {
     const input = document.getElementById("input");
     const modelSelect = document.getElementById("model-select");
 
+    if (!input || input.disabled) return;
     const msg = input.value;
-    if (!msg) return;
+    if (!msg.trim()) return;
     if (!currentChatId) {
         await loadChats();
         return;
@@ -414,6 +416,23 @@ async function sendMessage() {
                             // ignore malformed chunks
                         }
                     }
+
+                    function registerServiceWorker() {
+                        if (!("serviceWorker" in navigator)) return;
+                        navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+                            console.error("Service worker registration failed:", error);
+                        });
+                    }
+
+                    function setupInputSendShortcut() {
+                        const input = document.getElementById("input");
+                        if (!input) return;
+                        input.addEventListener("keydown", (event) => {
+                            if (event.key !== "Enter" || event.shiftKey) return;
+                            event.preventDefault();
+                            sendMessage();
+                        });
+                    }
                 }
                 if (streamEnded) break;
             }
@@ -459,6 +478,8 @@ async function renameCurrentChat() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+    registerServiceWorker();
+    setupInputSendShortcut();
     await loadModelOptions();
     await loadChats();
 });
